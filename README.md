@@ -49,6 +49,43 @@ Humans can start with:
 - [`docs/exec-plans/active/0001-mvp.md`](docs/exec-plans/active/0001-mvp.md)
 - [`docs/development/LOCAL_SETUP.md`](docs/development/LOCAL_SETUP.md)
 
+## Local development
+
+Open `services/api/Lajur.slnx` in Visual Studio for backend work and open
+`apps/android/` in Android Studio for Android work. Both applications remain in
+this repository but have independent build entry points.
+
+From the repository root, restore, build, and test the backend with:
+
+```powershell
+dotnet restore services/api/Lajur.slnx
+dotnet build services/api/Lajur.slnx --no-restore
+dotnet test services/api/Lajur.slnx --no-build
+```
+
+Run the API directly with:
+
+```powershell
+dotnet run --project services/api/src/Lajur.Api
+```
+
+Build and test Android with the committed Gradle Wrapper:
+
+```powershell
+.\apps\android\gradlew.bat -p apps/android testDebugUnitTest assembleDebug
+```
+
+Run the local container stack with:
+
+```powershell
+docker compose up --build --detach
+Invoke-WebRequest http://127.0.0.1:8080/health/ready
+docker compose down
+```
+
+See [`docs/development/LOCAL_SETUP.md`](docs/development/LOCAL_SETUP.md) for SDK,
+Android emulator/device, Docker, and local-only file guidance.
+
 ## Core technology direction
 
 | Area | Direction |
