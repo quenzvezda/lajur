@@ -150,6 +150,8 @@ Maintain two separate workbook artifacts outside the private source:
 
 Tests should use the sanitized fixture. New-year workbook generation should use the production template and then patch only known year/month-specific nodes.
 
+The regression fixture is now available as `tests/workbook-fixtures/LajurWorkbookFixture.xlsm`. It contains synthetic Master values and eight fake transactions distributed across January, February, September, and December so tests cover populated, empty, early-year, and late-year monthly sheets. Verification covers package integrity, native Excel opening, tables, PivotTables, charts, controls, conditional formatting, formula-error parity with the clean template, absence of sampled private configuration strings, and byte-identical `vbaProject.bin` preservation.
+
 ## Automation policy
 
 The long-term normalization tool should be idempotent:
