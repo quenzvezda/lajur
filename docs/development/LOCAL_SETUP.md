@@ -65,6 +65,21 @@ The target POCO F6 is valuable for biometric, camera, share-intent, WorkManager,
 
 Enable Developer options and USB debugging when device testing begins. Use sanitized receipts/screenshots for committed test assets.
 
+
+## Local Docker stack
+
+Run from the repository root:
+
+```powershell
+docker compose config
+docker compose up --build --detach
+docker compose ps
+Invoke-WebRequest http://127.0.0.1:8080/health/ready
+docker compose down
+```
+
+By default, the API is bound only to `127.0.0.1:8080`. Persistent local directories are created under ignored `.local/lajur/`. For the VPS, copy `.env.example` to an untracked `.env` and set the host paths to `/srv/lajur/*`.
+
 ## Expected repository layout
 
 ```text
