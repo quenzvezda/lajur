@@ -6,6 +6,8 @@ The macro-enabled Excel workbook is the canonical financial store.
 
 The backend must mutate it conservatively and preserve all unrelated workbook features.
 
+The detailed, privacy-safe inventory of the supplied workbook is maintained in [`../reference/WORKBOOK_OBSERVED_STRUCTURE.md`](../reference/WORKBOOK_OBSERVED_STRUCTURE.md).
+
 ## 2. File model
 
 One account owns one workbook per year:
@@ -75,7 +77,8 @@ Earlier design discussion considered `TransactionId`, `Revision`, and timestamp 
 Reason:
 
 - monthly sheets have active content to the right of column F;
-- for example the supplied September sheet uses H/I for summary/pivot-style content and K:O for cash projections;
+- monthly sheets use H:I for category analytics, K:P for cash projection and spending pace, R:V and farther-right areas for rankings/comparisons/charts, and hidden AD:AO helpers;
+- these areas include charts, PivotTables, cached pivot data, comments, controls, conditional formatting, and formulas;
 - inserting table columns risks moving/breaking formulas, pivots, drawings, macros, or expected addresses.
 
 Use hidden system sheets instead.
@@ -130,6 +133,8 @@ The supplied workbook contains `xl/vbaProject.bin`.
 Any mutation/import/migration must preserve VBA/package parts unless a deliberate template migration explicitly changes them.
 
 Workbook preservation tests should verify the VBA part remains present and, for ordinary transaction writes, byte-identical.
+
+The macro button binding `TambahBarisBaru_ActiveSheet`, form controls, control properties, and VML drawings must also survive ordinary mutations unchanged.
 
 No server-side execution of VBA is required.
 
