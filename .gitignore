@@ -1,0 +1,82 @@
+# Operating systems
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editors and IDEs
+.idea/
+*.iml
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+_ReSharper*/
+*.DotSettings.user
+out/
+
+# .NET
+**/bin/
+**/obj/
+TestResults/
+artifacts/
+coverage/
+coverage.*
+*.coverage
+*.coveragexml
+*.nupkg
+*.snupkg
+
+# Android / Gradle
+.gradle/
+.kotlin/
+**/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.hprof
+hs_err_pid*
+lint-results*.html
+**/app/release/
+
+# Android signing material
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.local.json
+secrets.json
+
+# Runtime data and private financial material
+.local/
+private/
+receipts/
+backups/
+data/
+logs/
+*.log
+/Keuangan_Pribadi_*.xlsm
+
+# Keep sanitized workbook fixtures versioned.
+!tests/workbook-fixtures/
+!tests/workbook-fixtures/**/*.xlsm
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
