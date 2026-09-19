@@ -1,0 +1,11 @@
+@Lajur.Api_HostAddress = http://localhost:5239
+
+GET {{Lajur.Api_HostAddress}}/health/live
+Accept: application/json
+
+###
+
+GET {{Lajur.Api_HostAddress}}/health/ready
+Accept: application/json
+
+###

@@ -18,6 +18,21 @@ Required:
 - .NET 10 SDK;
 - Docker Desktop only when running the containerized development stack.
 
+Run Backend verification from PowerShell:
+
+```powershell
+cd services/api
+dotnet restore Lajur.slnx
+dotnet build Lajur.slnx --no-restore
+dotnet test Lajur.slnx --no-build
+```
+
+Run the API with:
+
+```powershell
+dotnet run --project src/Lajur.Api
+```
+
 ### Android
 
 Install the latest stable Android Studio and let its Setup Wizard install:

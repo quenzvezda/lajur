@@ -6,6 +6,9 @@
 
 *.cs text eol=lf
 *.csproj text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.http text eol=lf
 *.sln text eol=crlf
 *.slnx text eol=lf
 *.kt text eol=lf

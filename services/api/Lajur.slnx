@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Lajur.Api/Lajur.Api.csproj" />
+    <Project Path="src/Lajur.Application/Lajur.Application.csproj" />
+    <Project Path="src/Lajur.Domain/Lajur.Domain.csproj" />
+    <Project Path="src/Lajur.Infrastructure/Lajur.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Lajur.IntegrationTests/Lajur.IntegrationTests.csproj" />
+    <Project Path="tests/Lajur.UnitTests/Lajur.UnitTests.csproj" />
+    <Project Path="tests/Lajur.WorkbookTests/Lajur.WorkbookTests.csproj" />
+  </Folder>
+</Solution>
