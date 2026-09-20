@@ -65,7 +65,7 @@ secrets.json
 private/
 receipts/
 backups/
-data/
+/data/
 logs/
 *.log
 /Keuangan_Pribadi_*.xlsm

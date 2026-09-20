@@ -77,7 +77,26 @@ Run Android verification from PowerShell:
 cd apps/android
 .\gradlew.bat testDebugUnitTest
 .\gradlew.bat assembleDebug
+.\gradlew.bat compileDebugAndroidTestKotlin lintDebug
 ```
+
+The emulator reaches the host API through
+`http://10.0.2.2:8080/api/v1/`, which is the debug default. A physical device
+must use the development computer's reachable LAN address (and the API must be
+bound/firewalled accordingly). The login screen can override the address, or a
+different build default can be supplied with
+`-PLAJUR_API_BASE_URL=https://host/api/v1/`.
+
+Create an emulator system image in Android Studio Device Manager, or connect a
+USB-debuggable device, before running:
+
+```powershell
+cd apps/android
+.\gradlew.bat connectedDebugAndroidTest
+```
+
+The complete Phase 5 offline/restart/reconnect smoke procedure is documented in
+`apps/android/README.md`.
 
 The Gradle Wrapper JAR and both wrapper scripts are repository files and must be committed. Gradle caches, IDE state, `local.properties`, APK/AAB outputs, and signing material must remain untracked.
 

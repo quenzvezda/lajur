@@ -18,6 +18,12 @@ Baseline:
 
 Do not adopt a large framework merely to satisfy “clean architecture” aesthetics.
 
+Phase 5 uses a small application-scoped `AppContainer` instead of a DI
+framework, and a focused OkHttp/kotlinx-serialization API client instead of
+Retrofit. These are implementation choices, not new architectural constraints;
+introduce a framework only when a later slice demonstrates enough repeated
+wiring to justify it.
+
 ## 2. Suggested modules/packages
 
 A single Gradle app module is acceptable for the first vertical slice. Split only when build/ownership boundaries justify it.
@@ -62,6 +68,10 @@ Stores normal preferences:
 Stores sensitive local secrets such as refresh credentials/keys.
 
 Never put raw refresh tokens in normal DataStore/plain SharedPreferences.
+
+The Phase 5 session store encrypts the persisted refresh session with AES-GCM
+using a non-exportable Android Keystore key. Access tokens remain memory-only,
+and Android backup is disabled for the application.
 
 ## 4. Offline-first save
 
