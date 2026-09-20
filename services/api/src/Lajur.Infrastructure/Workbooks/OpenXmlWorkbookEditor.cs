@@ -27,12 +27,18 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
     private static readonly IReadOnlyDictionary<int, MonthDefinition> Months =
         new Dictionary<int, MonthDefinition>
         {
-            [1] = new("Jan", "JanTable"), [2] = new("Feb", "FebTable"),
-            [3] = new("Mar", "MarTable"), [4] = new("April", "AprilTable"),
-            [5] = new("May", "MayTable"), [6] = new("June", "JuneTable"),
-            [7] = new("July", "JulyTable"), [8] = new("Aug", "AugTable"),
-            [9] = new("Sep", "SepTable"), [10] = new("Okt", "OktTable"),
-            [11] = new("Nov", "NovTable"), [12] = new("Des", "DesTable")
+            [1] = new("Jan", "JanTable"),
+            [2] = new("Feb", "FebTable"),
+            [3] = new("Mar", "MarTable"),
+            [4] = new("April", "AprilTable"),
+            [5] = new("May", "MayTable"),
+            [6] = new("June", "JuneTable"),
+            [7] = new("July", "JulyTable"),
+            [8] = new("Aug", "AugTable"),
+            [9] = new("Sep", "SepTable"),
+            [10] = new("Okt", "OktTable"),
+            [11] = new("Nov", "NovTable"),
+            [12] = new("Des", "DesTable")
         };
 
     public WorkbookTransaction CreateTransaction(
@@ -49,8 +55,18 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
 
         if (FindRowByFirstColumn(indexPart, command.TransactionId.ToString("D")) is not null)
         {
-            throw new WorkbookConflictException(
-                $"Transaction '{command.TransactionId:D}' already exists in the workbook index.");
+            var existing = ReadIndexEntry(indexPart, command.TransactionId);
+            var requestedSnapshot = SerializeSnapshot(command.Transaction);
+
+            if (!existing.IsDeleted
+                && existing.Year == key.Year
+                && string.Equals(existing.ContentHash, HashSnapshot(requestedSnapshot), StringComparison.Ordinal))
+            {
+                return ToTransaction(command.TransactionId, existing.Revision, command.Transaction);
+            }
+
+            throw new WorkbookTransactionIdConflictException(
+                $"Transaction '{command.TransactionId:D}' already exists with different canonical content.");
         }
 
         var excelRow = AppendTransactionRow(workbookPart, command.Transaction);
@@ -110,7 +126,7 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
 
         if (indexEntry.Revision != command.ExpectedRevision)
         {
-            throw new WorkbookConflictException(
+            throw new WorkbookRevisionConflictException(
                 $"Transaction '{command.TransactionId:D}' is revision {indexEntry.Revision}, not expected revision {command.ExpectedRevision}.");
         }
 
@@ -181,7 +197,7 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
 
         if (indexEntry.Revision != command.ExpectedRevision)
         {
-            throw new WorkbookConflictException(
+            throw new WorkbookRevisionConflictException(
                 $"Transaction '{command.TransactionId:D}' is revision {indexEntry.Revision}, not expected revision {command.ExpectedRevision}.");
         }
 

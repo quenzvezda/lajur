@@ -1,5 +1,8 @@
 using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
@@ -106,6 +109,36 @@ public sealed partial class OpenXmlWorkbookReader
         }
 
         return transactions;
+    }
+
+    public IReadOnlyList<WorkbookTransaction> ReadApplicationTransactions(
+        string workbookPath,
+        int workbookYear,
+        int month)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workbookPath);
+
+        if (!Months.ContainsKey(month))
+        {
+            throw new ArgumentOutOfRangeException(nameof(month), month, "Month must be between 1 and 12.");
+        }
+
+        return ReadIndexedTransactions(workbookPath)
+            .Where(transaction => transaction.Date.Year == workbookYear && transaction.Date.Month == month)
+            .ToArray();
+    }
+
+    public WorkbookTransaction? ReadApplicationTransaction(string workbookPath, Guid transactionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workbookPath);
+
+        if (transactionId == Guid.Empty)
+        {
+            throw new ArgumentException("Transaction ID must not be empty.", nameof(transactionId));
+        }
+
+        return ReadIndexedTransactions(workbookPath)
+            .SingleOrDefault(transaction => transaction.TransactionId == transactionId);
     }
 
     public WorkbookMasterData ReadMasterData(string workbookPath, int workbookYear)
@@ -219,6 +252,104 @@ public sealed partial class OpenXmlWorkbookReader
             paymentMethods,
             categories,
             definedNames);
+    }
+
+    private static IReadOnlyList<WorkbookTransaction> ReadIndexedTransactions(string workbookPath)
+    {
+        using var document = SpreadsheetDocument.Open(workbookPath, false);
+        var workbookPart = document.WorkbookPart
+            ?? throw InvalidWorkbook("The package does not contain a workbook part.");
+        var workbook = workbookPart.Workbook
+            ?? throw InvalidWorkbook("The workbook part does not contain a workbook definition.");
+        var indexSheet = workbook.Sheets?.Elements<Sheet>()
+            .SingleOrDefault(sheet => sheet.Name?.Value == "__AppIndex");
+
+        if (indexSheet is null)
+        {
+            return [];
+        }
+
+        if (indexSheet.Id?.Value is not { } relationshipId
+            || workbookPart.GetPartById(relationshipId) is not WorksheetPart worksheetPart)
+        {
+            throw InvalidWorkbook("System sheet '__AppIndex' has no worksheet part.");
+        }
+
+        var rows = worksheetPart.Worksheet?.GetFirstChild<SheetData>()?.Elements<Row>().Skip(1)
+            ?? [];
+        var transactions = new List<WorkbookTransaction>();
+
+        foreach (var row in rows)
+        {
+            var idText = ReadSystemCell(FindCell(row, 1));
+            if (string.IsNullOrWhiteSpace(idText))
+            {
+                continue;
+            }
+
+            if (!Guid.TryParse(idText, out var transactionId)
+                || !int.TryParse(ReadSystemCell(FindCell(row, 2)), CultureInfo.InvariantCulture, out var year)
+                || !int.TryParse(ReadSystemCell(FindCell(row, 3)), CultureInfo.InvariantCulture, out var month)
+                || !int.TryParse(ReadSystemCell(FindCell(row, 5)), CultureInfo.InvariantCulture, out var revision))
+            {
+                throw InvalidWorkbook($"System index row {row.RowIndex?.Value} is invalid.");
+            }
+
+            var isDeleted = ReadSystemCell(FindCell(row, 8)) is "1" or "true" or "TRUE";
+            if (isDeleted)
+            {
+                continue;
+            }
+
+            var snapshotJson = ReadSystemCell(FindCell(row, 7));
+            var expectedHash = ReadSystemCell(FindCell(row, 6));
+            var actualHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)))
+                .ToLowerInvariant();
+            if (!string.Equals(expectedHash, actualHash, StringComparison.Ordinal))
+            {
+                throw InvalidWorkbook($"System index row {row.RowIndex?.Value} has a mismatched content hash.");
+            }
+
+            TransactionSnapshot? snapshot;
+            try
+            {
+                snapshot = JsonSerializer.Deserialize<TransactionSnapshot>(snapshotJson);
+            }
+            catch (JsonException exception)
+            {
+                throw InvalidWorkbook($"System index row {row.RowIndex?.Value} has invalid snapshot JSON.", exception);
+            }
+
+            if (snapshot is null
+                || !DateOnly.TryParseExact(
+                    snapshot.Date,
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var date)
+                || date.Year != year
+                || date.Month != month
+                || revision < 1
+                || snapshot.AmountIdr <= 0
+                || string.IsNullOrWhiteSpace(snapshot.Type)
+                || string.IsNullOrWhiteSpace(snapshot.PaymentMethod)
+                || string.IsNullOrWhiteSpace(snapshot.Category))
+            {
+                throw InvalidWorkbook($"System index row {row.RowIndex?.Value} has inconsistent transaction data.");
+            }
+
+            transactions.Add(new WorkbookTransaction(
+                transactionId,
+                revision,
+                date,
+                snapshot.Type,
+                snapshot.PaymentMethod,
+                snapshot.Category,
+                snapshot.AmountIdr,
+                string.IsNullOrWhiteSpace(snapshot.Description) ? null : snapshot.Description));
+        }
+
+        return transactions;
     }
 
     private static WorkbookTransactionRow ParseTransaction(
@@ -358,7 +489,11 @@ public sealed partial class OpenXmlWorkbookReader
         return name;
     }
 
-    private static InvalidDataException InvalidWorkbook(string message) => new(message);
+    private static string ReadSystemCell(Cell? cell) =>
+        cell?.InlineString?.InnerText ?? cell?.CellValue?.InnerText ?? cell?.InnerText ?? string.Empty;
+
+    private static InvalidDataException InvalidWorkbook(string message, Exception? innerException = null) =>
+        new(message, innerException);
 
     [GeneratedRegex("^([A-Z]+)([0-9]+)$", RegexOptions.CultureInvariant)]
     private static partial Regex CellReferenceRegex();
@@ -369,4 +504,12 @@ public sealed partial class OpenXmlWorkbookReader
     private sealed record MonthDefinition(string SheetName, string TableName);
 
     private sealed record TableRange(string StartColumn, uint StartRow, string EndColumn, uint EndRow);
+
+    private sealed record TransactionSnapshot(
+        string Date,
+        string Type,
+        string PaymentMethod,
+        string Category,
+        long AmountIdr,
+        string? Description);
 }

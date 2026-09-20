@@ -1,9 +1,12 @@
 using Lajur.Api.Auth;
+using Lajur.Api.Errors;
 using Lajur.Api.Health;
 using Lajur.Application.Auth;
 using Lajur.Infrastructure.Auth;
+using Lajur.Infrastructure.Finance;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -14,7 +17,26 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<FinanceExceptionHandler>();
 builder.Services.AddLajurAuthPersistence(builder.Configuration);
+builder.Services.AddLajurFinance();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var problem = new ValidationProblemDetails(context.ModelState)
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Request validation failed"
+        };
+        problem.Extensions["code"] = "request_validation_failed";
+        problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+        return new BadRequestObjectResult(problem)
+        {
+            ContentTypes = { "application/problem+json" }
+        };
+    };
+});
 
 builder.Services.AddSingleton(provider =>
 {

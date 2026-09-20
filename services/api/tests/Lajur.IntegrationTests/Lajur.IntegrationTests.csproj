@@ -24,4 +24,10 @@
     <ProjectReference Include="..\..\src\Lajur.Infrastructure\Lajur.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\..\..\..\tests\workbook-fixtures\LajurWorkbookFixture.xlsm"
+          Link="Fixtures\LajurWorkbookFixture.xlsm"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

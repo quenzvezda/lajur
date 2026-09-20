@@ -74,6 +74,28 @@ v1 one-active-device policy. Refresh tokens are stored only as SHA-256 hashes;
 passwords use ASP.NET Core's password hasher. Login and refresh endpoints are
 rate limited.
 
+## Finance API
+
+Authenticated Phase 3 endpoints are available under `/api/v1`:
+
+- `GET /master?year=2026`;
+- `GET /summary?year=2026&month=9`;
+- `GET /transactions?year=2026&month=9&query=coffee`;
+- `POST /transactions`;
+- `PUT /transactions/{id}?year=2026`;
+- `DELETE /transactions/{id}?year=2026&expectedRevision=3`.
+
+The API resolves storage exclusively from the authenticated immutable user ID.
+Create is idempotent by client-generated transaction UUID; update and delete
+require the expected revision. Summary values are calculated from canonical A:F
+rows rather than Excel formula caches. Stable ProblemDetails codes distinguish
+missing workbooks/transactions, ID conflicts, revision conflicts, request
+validation, and workbook validation failures.
+
+Workbook provisioning and migration remain Phase 4 responsibilities. Before
+migration, transaction listing exposes only rows represented in `__AppIndex`,
+while summary calculation includes every valid visible transaction row.
+
 ## Workbook module status
 
 The Phase 1 workbook spike is implemented under `src/Lajur.Infrastructure/Workbooks`.

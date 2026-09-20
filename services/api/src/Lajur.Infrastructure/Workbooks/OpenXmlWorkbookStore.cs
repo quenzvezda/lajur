@@ -5,15 +5,59 @@ namespace Lajur.Infrastructure.Workbooks;
 public sealed class OpenXmlWorkbookStore
 {
     private static readonly ConcurrentDictionary<WorkbookKey, SemaphoreSlim> Locks = new();
-    private readonly string storageRoot;
+    private readonly Func<WorkbookKey, string> workbookPathResolver;
     private readonly TimeProvider timeProvider;
 
     public OpenXmlWorkbookStore(string storageRoot, TimeProvider? timeProvider = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageRoot);
-        this.storageRoot = Path.GetFullPath(storageRoot);
+        var normalizedRoot = Path.GetFullPath(storageRoot);
+        workbookPathResolver = key => Path.Combine(
+            normalizedRoot,
+            "users",
+            key.UserId.ToString("D"),
+            "workbooks",
+            $"Keuangan_Pribadi_{key.Year}.xlsm");
         this.timeProvider = timeProvider ?? TimeProvider.System;
     }
+
+    public OpenXmlWorkbookStore(
+        Func<WorkbookKey, string> workbookPathResolver,
+        TimeProvider? timeProvider = null)
+    {
+        ArgumentNullException.ThrowIfNull(workbookPathResolver);
+        this.workbookPathResolver = workbookPathResolver;
+        this.timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
+    public Task<WorkbookMasterData> GetMasterDataAsync(
+        WorkbookKey key,
+        CancellationToken cancellationToken = default) =>
+        ReadAsync(key, (reader, path) => reader.ReadMasterData(path, key.Year), cancellationToken);
+
+    public Task<IReadOnlyList<WorkbookTransaction>> ListTransactionsAsync(
+        WorkbookKey key,
+        int month,
+        CancellationToken cancellationToken = default) =>
+        ReadAsync(
+            key,
+            (reader, path) => reader.ReadApplicationTransactions(path, key.Year, month),
+            cancellationToken);
+
+    public Task<IReadOnlyList<WorkbookTransactionRow>> ListCanonicalRowsAsync(
+        WorkbookKey key,
+        int month,
+        CancellationToken cancellationToken = default) =>
+        ReadAsync(key, (reader, path) => reader.ReadMonthlyTransactions(path, month), cancellationToken);
+
+    public Task<WorkbookTransaction?> GetTransactionAsync(
+        WorkbookKey key,
+        Guid transactionId,
+        CancellationToken cancellationToken = default) =>
+        ReadAsync(
+            key,
+            (reader, path) => reader.ReadApplicationTransaction(path, transactionId),
+            cancellationToken);
 
     public async Task<WorkbookTransaction> CreateTransactionAsync(
         WorkbookKey key,
@@ -129,12 +173,32 @@ public sealed class OpenXmlWorkbookStore
         }
     }
 
-    private string ResolveWorkbookPath(WorkbookKey key) => Path.Combine(
-        storageRoot,
-        "users",
-        key.UserId.ToString("D"),
-        "workbooks",
-        $"Keuangan_Pribadi_{key.Year}.xlsm");
+    private async Task<TResult> ReadAsync<TResult>(
+        WorkbookKey key,
+        Func<OpenXmlWorkbookReader, string, TResult> read,
+        CancellationToken cancellationToken)
+    {
+        ValidateKey(key);
+        var gate = Locks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            var activePath = ResolveWorkbookPath(key);
+            if (!File.Exists(activePath))
+            {
+                throw new FileNotFoundException("The active workbook was not found.", activePath);
+            }
+
+            return read(new OpenXmlWorkbookReader(), activePath);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private string ResolveWorkbookPath(WorkbookKey key) => Path.GetFullPath(workbookPathResolver(key));
 
     private static void ValidateWorkbook(string workbookPath, int year)
     {

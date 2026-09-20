@@ -265,7 +265,7 @@ public sealed partial class OpenXmlWorkbookStoreTests
         Assert.Single(new OpenXmlWorkbookReader().ReadMonthlyTransactions(workspace.WorkbookPath, 7));
 
         var hashBeforeStaleUpdate = SHA256.HashData(File.ReadAllBytes(workspace.WorkbookPath));
-        await Assert.ThrowsAsync<WorkbookConflictException>(() => store.UpdateTransactionAsync(
+        await Assert.ThrowsAsync<WorkbookRevisionConflictException>(() => store.UpdateTransactionAsync(
             workspace.Key,
             new UpdateWorkbookTransactionCommand(
                 transactionId,

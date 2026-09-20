@@ -48,7 +48,13 @@ public sealed record DeleteWorkbookTransactionCommand(
     int ExpectedRevision,
     WorkbookAuditContext Audit);
 
-public sealed class WorkbookConflictException(string message) : Exception(message);
+public class WorkbookConflictException(string message) : Exception(message);
+
+public sealed class WorkbookTransactionIdConflictException(string message)
+    : WorkbookConflictException(message);
+
+public sealed class WorkbookRevisionConflictException(string message)
+    : WorkbookConflictException(message);
 
 public sealed class WorkbookTransactionNotFoundException(Guid transactionId)
     : Exception($"Transaction '{transactionId:D}' was not found in the workbook.");

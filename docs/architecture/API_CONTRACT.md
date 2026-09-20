@@ -123,6 +123,10 @@ No requirement to reproduce the full Excel dashboard.
 
 Pagination is optional initially because monthly transaction volume is modest, but the API design should not require returning all years at once.
 
+Until legacy workbook migration runs in Phase 4, this endpoint returns only
+application-owned rows represented in `__AppIndex`. Summary totals still include
+all valid visible A:F transaction rows.
+
 Response item:
 
 ```json
@@ -162,7 +166,7 @@ Semantics:
 
 An `Idempotency-Key` header equal to transaction ID may also be accepted, but transaction ID is the durable identity.
 
-### `PUT /transactions/{id}`
+### `PUT /transactions/{id}?year=2026`
 
 ```json
 {
@@ -178,11 +182,15 @@ An `Idempotency-Key` header equal to transaction ID may also be accepted, but tr
 
 If canonical revision differs: `409 Conflict`.
 
+`year` identifies the current workbook containing the transaction. Moving a
+transaction to another month in the same year is supported. Moving it across
+years is rejected in v1 and must be represented as delete + create.
+
 Successful update increments revision by exactly one and appends audit history.
 
-### `DELETE /transactions/{id}`
+### `DELETE /transactions/{id}?year=2026&expectedRevision=3`
 
-Request body or query contains `expectedRevision`.
+The query contains the current workbook year and `expectedRevision`.
 
 Delete:
 
