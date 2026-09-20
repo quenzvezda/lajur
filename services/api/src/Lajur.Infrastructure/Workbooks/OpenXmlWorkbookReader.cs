@@ -108,6 +108,119 @@ public sealed partial class OpenXmlWorkbookReader
         return transactions;
     }
 
+    public WorkbookMasterData ReadMasterData(string workbookPath, int workbookYear)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workbookPath);
+
+        if (workbookYear is < 1900 or > 9999)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(workbookYear),
+                workbookYear,
+                "Workbook year must be between 1900 and 9999.");
+        }
+
+        using var document = SpreadsheetDocument.Open(workbookPath, false);
+        var workbookPart = document.WorkbookPart
+            ?? throw InvalidWorkbook("The package does not contain a workbook part.");
+        var workbook = workbookPart.Workbook
+            ?? throw InvalidWorkbook("The workbook part does not contain a workbook definition.");
+
+        if (workbookPart.VbaProjectPart is null)
+        {
+            throw InvalidWorkbook("The workbook does not contain the required VBA project.");
+        }
+
+        var sheet = workbook.Sheets?
+            .Elements<Sheet>()
+            .SingleOrDefault(candidate => candidate.Name?.Value == "Master")
+            ?? throw InvalidWorkbook("Required sheet 'Master' was not found.");
+
+        if (sheet.Id?.Value is not { } relationshipId
+            || workbookPart.GetPartById(relationshipId) is not WorksheetPart worksheetPart)
+        {
+            throw InvalidWorkbook("Sheet 'Master' has no worksheet part.");
+        }
+
+        var worksheet = worksheetPart.Worksheet
+            ?? throw InvalidWorkbook("Sheet 'Master' does not contain a worksheet definition.");
+        var sheetData = worksheet.GetFirstChild<SheetData>()
+            ?? throw InvalidWorkbook("Sheet 'Master' does not contain sheet data.");
+
+        var categories = new List<WorkbookCategory>();
+        var transactionTypes = new List<string>();
+        var paymentMethods = new List<string>();
+
+        for (uint rowNumber = 5; rowNumber <= 81; rowNumber++)
+        {
+            var row = sheetData.Elements<Row>().SingleOrDefault(candidate => candidate.RowIndex?.Value == rowNumber);
+            var categoryName = ReadCellText(workbookPart, row is null ? null : FindCell(row, 1));
+
+            if (string.IsNullOrWhiteSpace(categoryName))
+            {
+                continue;
+            }
+
+            var kind = Required(
+                ReadCellText(workbookPart, row is null ? null : FindCell(row, 2)),
+                new MonthDefinition("Master", "Master"),
+                rowNumber,
+                "Jenis");
+            var budgetText = ReadCellText(workbookPart, row is null ? null : FindCell(row, 3));
+            long? budget = string.IsNullOrWhiteSpace(budgetText)
+                ? null
+                : ParseAmount(budgetText, new MonthDefinition("Master", "Master"), rowNumber);
+
+            categories.Add(new WorkbookCategory(categoryName, kind, budget));
+        }
+
+        for (uint rowNumber = 5; rowNumber <= 6; rowNumber++)
+        {
+            var row = sheetData.Elements<Row>().SingleOrDefault(candidate => candidate.RowIndex?.Value == rowNumber);
+            var value = ReadCellText(workbookPart, row is null ? null : FindCell(row, 5));
+
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                transactionTypes.Add(value);
+            }
+        }
+
+        for (uint rowNumber = 5; rowNumber <= 24; rowNumber++)
+        {
+            var row = sheetData.Elements<Row>().SingleOrDefault(candidate => candidate.RowIndex?.Value == rowNumber);
+            var value = ReadCellText(workbookPart, row is null ? null : FindCell(row, 7));
+
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                paymentMethods.Add(value);
+            }
+        }
+
+        var definedNames = workbook.DefinedNames?
+            .Elements<DefinedName>()
+            .Where(candidate => candidate.Name?.Value is not null)
+            .ToDictionary(
+                candidate => candidate.Name!.Value!,
+                candidate => candidate.Text ?? string.Empty,
+                StringComparer.Ordinal)
+            ?? new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var requiredName in new[] { "ListKategori", "ListPembayaran", "ListTipe" })
+        {
+            if (!definedNames.ContainsKey(requiredName))
+            {
+                throw InvalidWorkbook($"Required defined name '{requiredName}' was not found.");
+            }
+        }
+
+        return new WorkbookMasterData(
+            workbookYear,
+            transactionTypes,
+            paymentMethods,
+            categories,
+            definedNames);
+    }
+
     private static WorkbookTransactionRow ParseTransaction(
         IReadOnlyList<string?> values,
         MonthDefinition month,

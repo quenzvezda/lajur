@@ -29,3 +29,20 @@ Initial health endpoints:
 
 - `GET /health/live`
 - `GET /health/ready`
+
+## Workbook module status
+
+The Phase 1 workbook spike is implemented under `src/Lajur.Infrastructure/Workbooks`.
+It uses `DocumentFormat.OpenXml` without Excel COM/Interop and provides:
+
+- read-only monthly A:F transaction and Master-data parsing;
+- create, revision-checked update, and revision-checked delete operations;
+- very-hidden `__AppIndex` identity/tombstone metadata;
+- very-hidden append-only `__AuditLog` history;
+- per-user/year in-process serialization;
+- same-filesystem temporary-copy validation and atomic promotion.
+
+Workbook tests use the synthetic XLSM fixture copied into the test output. Ordinary
+mutations preserve VBA bytes and unrelated package parts. Existing legacy rows are
+not assigned application transaction IDs by the spike; that migration belongs to
+the import/onboarding phase.

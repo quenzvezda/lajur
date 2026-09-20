@@ -102,4 +102,29 @@ public sealed class OpenXmlWorkbookReaderTests
             tempDirectory.Delete(recursive: true);
         }
     }
+
+    [Fact]
+    public void ReadMasterData_ReadsWorkbookOwnedListsAndDefinedNames()
+    {
+        var reader = new OpenXmlWorkbookReader();
+
+        var master = reader.ReadMasterData(FixturePath, 2026);
+
+        Assert.Equal(2026, master.WorkbookYear);
+        Assert.Equal(["Pengeluaran", "Pemasukan"], master.TransactionTypes);
+        Assert.Equal(
+            ["Tunai Uji", "Bank Uji", "Dompet Uji", "Kartu Uji", "Transfer Uji", "Voucher Uji", "Cicilan Uji", "Lainnya Uji"],
+            master.PaymentMethods);
+        Assert.Equal(31, master.Categories.Count);
+        Assert.Equal(
+            new WorkbookCategory("Kategori Uji 01", "Pengeluaran", 100_000),
+            master.Categories[0]);
+        Assert.Equal(
+            new WorkbookCategory("Pendapatan Uji 07", "Pemasukan", null),
+            master.Categories[^1]);
+        Assert.Equal(
+            "OFFSET(Master!$A$5,0,0,COUNTA(Master!$A$5:$A$81),1)",
+            master.DefinedNames["ListKategori"]);
+        Assert.Equal("Master!$E$5:$E$6", master.DefinedNames["ListTipe"]);
+    }
 }
