@@ -18,6 +18,9 @@ import com.lajur.app.security.AppLockStatus
 import com.lajur.app.scan.ScanImageRequest
 import com.lajur.app.scan.ScanImageSource
 import com.lajur.app.scan.SmartScanState
+import com.lajur.app.scan.extraction.TransactionExtraction
+import com.lajur.app.scan.extraction.ExtractionRunResult
+import com.lajur.app.scan.extraction.ValidatedTransactionExtraction
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -41,6 +44,11 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     val pendingSharedImage: StateFlow<String?> = mutablePendingSharedImage.asStateFlow()
     private val mutableSmartScanState = MutableStateFlow<SmartScanState>(SmartScanState.Idle)
     val smartScanState: StateFlow<SmartScanState> = mutableSmartScanState.asStateFlow()
+    private val mutableExtractionReview = MutableStateFlow<ValidatedTransactionExtraction?>(null)
+    val extractionReview: StateFlow<ValidatedTransactionExtraction?> = mutableExtractionReview.asStateFlow()
+    private val mutableExtractionStatus = MutableStateFlow<String?>(null)
+    val extractionStatus: StateFlow<String?> = mutableExtractionStatus.asStateFlow()
+    private var rawExtraction: TransactionExtraction? = null
     private var smartScanJob: Job? = null
     private val mutableMonth = MutableStateFlow(YearMonth.now())
     val month: StateFlow<YearMonth> = mutableMonth.asStateFlow()
@@ -85,6 +93,13 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
                 if (state is SessionState.SignedIn && !state.needsWorkbookOnboarding) {
                     container.scheduler.enqueue()
                     refresh()
+                }
+            }
+        }
+        viewModelScope.launch {
+            master.collect { currentMaster ->
+                rawExtraction?.let { extraction ->
+                    mutableExtractionReview.value = container.extractionValidator.validate(extraction, currentMaster)
                 }
             }
         }
@@ -206,6 +221,9 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         smartScanJob?.cancel()
         val request = ScanImageRequest(uri, source)
         mutableSmartScanState.value = SmartScanState.Ready(request)
+        rawExtraction = null
+        mutableExtractionReview.value = null
+        mutableExtractionStatus.value = null
         mutablePendingSharedImage.value = if (source == ScanImageSource.SHARE) uri else null
     }
 
@@ -219,21 +237,50 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         mutablePendingSharedImage.value = null
         mutableSmartScanState.value = SmartScanState.Processing(request)
         smartScanJob = viewModelScope.launch {
-            runCatching { container.smartScanPipeline.process(request) }
-                .onSuccess { output ->
-                    if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request == request) {
-                        mutableSmartScanState.value = SmartScanState.Complete(output)
-                        releaseTemporaryCapture(request)
+            container.transactionExtractionEngine.begin().use { extractionRequest ->
+                runCatching { container.smartScanPipeline.process(request) }
+                    .onSuccess { output ->
+                        if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request == request) {
+                            val completeState = SmartScanState.Complete(output)
+                            mutableSmartScanState.value = completeState
+                            releaseTemporaryCapture(request)
+                            val result = extractionRequest.extract(output.ocr.text, master.value)
+                            if (mutableSmartScanState.value != completeState) return@onSuccess
+                            val extraction = when (result) {
+                                is ExtractionRunResult.Completed -> {
+                                    mutableExtractionStatus.value = if (result.coldStart) {
+                                        "Model dimuat ${result.modelLoadMillis} ms · " +
+                                            "ekstraksi ${result.inferenceMillis} ms"
+                                    } else {
+                                        "Model siap · ekstraksi ${result.inferenceMillis} ms"
+                                    }
+                                    result.review.extraction
+                                }
+                                is ExtractionRunResult.Unavailable -> {
+                                    mutableExtractionStatus.value = result.message
+                                    TransactionExtraction.empty()
+                                }
+                                is ExtractionRunResult.Failed -> {
+                                    mutableExtractionStatus.value = "Ekstraksi otomatis gagal: ${result.message}"
+                                    TransactionExtraction.empty()
+                                }
+                            }
+                            rawExtraction = extraction
+                            mutableExtractionReview.value = when (result) {
+                                is ExtractionRunResult.Completed -> result.review
+                                else -> container.extractionValidator.validate(extraction, master.value)
+                            }
+                        }
                     }
-                }
-                .onFailure { error ->
-                    if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request == request) {
-                        mutableSmartScanState.value = SmartScanState.Failed(
-                            request,
-                            error.message ?: "OCR tidak dapat memproses gambar.",
-                        )
+                    .onFailure { error ->
+                        if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request == request) {
+                            mutableSmartScanState.value = SmartScanState.Failed(
+                                request,
+                                error.message ?: "OCR tidak dapat memproses gambar.",
+                            )
+                        }
                     }
-                }
+            }
         }
     }
 
@@ -242,6 +289,9 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         releaseTemporaryCapture(currentScanRequest())
         mutablePendingSharedImage.value = null
         mutableSmartScanState.value = SmartScanState.Idle
+        rawExtraction = null
+        mutableExtractionReview.value = null
+        mutableExtractionStatus.value = null
     }
 
     fun clearMessage() {

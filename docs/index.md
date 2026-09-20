@@ -25,6 +25,7 @@
 - [Local development setup](development/LOCAL_SETUP.md)
 - [Phase 5/6 emulator smoke test](development/EMULATOR_PHASE5_6_SMOKE.md)
 - [Phase 7 Smart Scan smoke test](development/PHASE7_SMART_SCAN_SMOKE.md)
+- [Phase 8 local-model development](development/PHASE8_LOCAL_MODEL.md)
 - [Known issues](development/KNOWN_ISSUES.md)
 
 ## Operations

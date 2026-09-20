@@ -70,6 +70,13 @@ logs/
 *.log
 /Keuangan_Pribadi_*.xlsm
 
+# Local AI model artifacts (large and potentially license-restricted)
+/models/
+apps/android/app/src/main/assets/models/
+*.litertlm
+*.gguf
+*.safetensors
+
 # Keep sanitized workbook fixtures versioned.
 !tests/workbook-fixtures/
 !tests/workbook-fixtures/**/*.xlsm

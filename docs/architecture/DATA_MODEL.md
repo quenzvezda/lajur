@@ -201,3 +201,35 @@ MasterData
 ```
 
 Android caches Master data for offline form dropdowns.
+
+## 8. Transient Smart Scan extraction
+
+Smart Scan uses a versioned, model-independent in-memory result before a
+transaction becomes a local draft:
+
+```text
+TransactionExtraction
+- schemaVersion
+- documentKind
+- date             : ExtractedField<local-date-string>
+- amountIdr        : ExtractedField<positive integer IDR>
+- transactionType  : ExtractedField<string>
+- paymentMethod    : ExtractedField<string>
+- category         : ExtractedField<string>
+- merchant         : ExtractedField<string>
+- description      : ExtractedField<string>
+- warnings[]
+
+ExtractedField<T>
+- value            : T?
+- alternatives[]   : T
+- confidence       : HIGH / MEDIUM / LOW / MISSING
+- evidence         : string?
+```
+
+The extraction is untrusted and is not a Room entity, outbox payload, server
+record, or workbook row. A deterministic validator first canonicalizes
+transaction type, payment method, and category against cached Master data. An
+invalid or unsupported value becomes `null` with a blocking issue. Valid
+partial fields may prefill the ordinary transaction editor, but all required
+fields still need human review before Save.

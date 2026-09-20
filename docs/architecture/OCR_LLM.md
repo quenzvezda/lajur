@@ -50,6 +50,12 @@ OCR and LLM loading may run concurrently after an image is selected.
 
 Proposed default model idle-unload timeout: 60 seconds, configurable.
 
+Phase 8B implements this lifecycle through a per-scan request/lease. Creating
+the request starts lazy initialization concurrently with OCR. Runtime work is
+serialized, multiple nearby scans reuse one resident engine, and closing the
+last request schedules unload after 60 idle seconds. A native generation error
+immediately unloads the possibly poisoned engine before another scan may retry.
+
 ## 4. Extraction schema
 
 Conceptual result:
@@ -61,41 +67,62 @@ Conceptual result:
   "date": {
     "value": "2026-09-19",
     "alternatives": [],
-    "status": "high",
+    "confidence": "high",
     "evidence": "19 Sep 2026 13:42"
   },
-  "amount": {
-    "valueIdr": 128500,
-    "alternativesIdr": [125000],
-    "status": "low",
+  "amountIdr": {
+    "value": 128500,
+    "alternatives": [125000],
+    "confidence": "low",
     "evidence": "Total pembayaran Rp128.500"
   },
   "transactionType": {
     "value": "Pengeluaran",
-    "status": "medium"
+    "alternatives": [],
+    "confidence": "medium"
   },
   "paymentMethod": {
     "value": "Shopee Pay",
     "alternatives": [],
-    "status": "high"
+    "confidence": "high"
   },
   "category": {
     "value": null,
     "alternatives": [],
-    "status": "missing"
+    "confidence": "missing"
   },
   "merchant": {
     "value": "PT Toko ABC",
-    "status": "medium"
+    "alternatives": [],
+    "confidence": "medium"
   },
   "description": {
-    "value": "Pembayaran ke PT Toko ABC"
+    "value": "Pembayaran ke PT Toko ABC",
+    "alternatives": [],
+    "confidence": "medium"
   },
   "warnings": []
 }
 ```
 
-Exact wire/class structure may change, but behavior must remain.
+Phase 8A implements this as serializable Android domain classes independent of
+the eventual model runtime. `schemaVersion` rejects incompatible model output
+instead of attempting a best-effort parse.
+
+The deterministic validator:
+
+- accepts only ISO `YYYY-MM-DD` dates and positive whole-rupiah amounts;
+- case-insensitively canonicalizes transaction type, payment method, category,
+  and their alternatives to the spelling in the cached workbook Master;
+- rejects values outside Master and categories belonging to another
+  transaction type;
+- preserves valid partial values for manual-editor prefill;
+- converts missing values to `missing` confidence and a value incorrectly
+  marked `missing` to `low` with a warning;
+- never manufactures a description from merchant or other evidence.
+
+Missing Master data and unsupported schema versions are blocking validation
+issues. Validation never turns an extraction directly into a saved transaction.
 
 ## 5. Confidence/ambiguity UX
 
@@ -187,6 +214,13 @@ extract_transaction(
 
 Parser failures must not crash the app. Invalid output becomes an incomplete draft/fallback state.
 
+Phase 8B bounds OCR prompt input to 24,000 characters and model responses to
+64,000 characters. OCR text is JSON-escaped and explicitly identified as
+untrusted data in the prompt. The parser tolerates a surrounding Markdown fence
+but requires an explicit `schemaVersion`; incompatible or malformed output is
+shown as an extraction failure while the raw OCR and manual-entry route remain
+available.
+
 ## 10. OCR engine
 
 OCR implementation must sit behind an interface.
@@ -273,3 +307,23 @@ Acceptable options:
 - download signed/checksummed model artifact from the operator's own VPS and cache locally.
 
 Third-party runtime download as a mandatory inference dependency is not desired.
+
+### Phase 8B runtime baseline
+
+The first production adapter is pinned to LiteRT-LM Android `0.16.0`, using its
+stable Kotlin interface and CPU backend as a conservative baseline. Google now
+recommends LiteRT-LM over the older MediaPipe LLM Inference API, which is in
+maintenance-only mode. This selects a replaceable runtime adapter, not the
+winning model or backend.
+
+The app looks only for the fixed private file
+`files/models/lajur-extractor.litertlm`. It never scans an untrusted filename,
+bundles a model in the APK, or downloads one from a third-party inference
+provider. A production download from the operator's own VPS still needs a
+signed/checksummed delivery design. Development side-loading and benchmark
+instructions live in `docs/development/PHASE8_LOCAL_MODEL.md`.
+
+References checked for Phase 8B:
+
+- [LiteRT-LM Kotlin API](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/api/kotlin/getting_started.md)
+- [Google AI Edge Android LLM guide](https://developers.google.com/edge/mediapipe/solutions/genai/llm_inference/android)

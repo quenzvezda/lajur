@@ -56,6 +56,10 @@ import com.lajur.app.security.AppLockSettings
 import com.lajur.app.security.AppLockStatus
 import com.lajur.app.scan.ScanImageSource
 import com.lajur.app.scan.SmartScanState
+import com.lajur.app.scan.extraction.ExtractedField
+import com.lajur.app.scan.extraction.ExtractionConfidence
+import com.lajur.app.scan.extraction.ExtractionFieldName
+import com.lajur.app.scan.extraction.ValidatedTransactionExtraction
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.YearMonth
@@ -66,7 +70,10 @@ private sealed interface AppScreen {
     data object Home : AppScreen
     data object Settings : AppScreen
     data object SmartScan : AppScreen
-    data class Editor(val transaction: LocalTransaction?) : AppScreen
+    data class Editor(
+        val transaction: LocalTransaction?,
+        val extraction: ValidatedTransactionExtraction? = null,
+    ) : AppScreen
     data class Detail(val transaction: LocalTransaction) : AppScreen
 }
 
@@ -128,6 +135,8 @@ private fun SignedInApp(
     val lockSettings by viewModel.appLockSettings.collectAsStateWithLifecycle()
     val pendingSharedImage by viewModel.pendingSharedImage.collectAsStateWithLifecycle()
     val smartScanState by viewModel.smartScanState.collectAsStateWithLifecycle()
+    val extractionReview by viewModel.extractionReview.collectAsStateWithLifecycle()
+    val extractionStatus by viewModel.extractionStatus.collectAsStateWithLifecycle()
     var screen: AppScreen by remember { mutableStateOf(AppScreen.Home) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -198,19 +207,22 @@ private fun SignedInApp(
         )
         AppScreen.SmartScan -> SmartScanScreen(
             state = smartScanState,
+            extractionReview = extractionReview,
+            extractionStatus = extractionStatus,
             onProcess = viewModel::processScan,
             onRetry = viewModel::processScan,
             onBack = {
                 viewModel.discardScan()
                 screen = AppScreen.Home
             },
-            onManualEntry = {
+            onManualEntry = { extraction ->
                 viewModel.discardScan()
-                screen = AppScreen.Editor(null)
+                screen = AppScreen.Editor(null, extraction)
             },
         )
         is AppScreen.Editor -> TransactionEditor(
             transaction = current.transaction,
+            initialExtraction = current.extraction,
             master = master,
             onBack = { screen = AppScreen.Home },
             onSave = { draft ->
@@ -450,10 +462,12 @@ private fun HomeScreen(
 @Composable
 private fun SmartScanScreen(
     state: SmartScanState,
+    extractionReview: ValidatedTransactionExtraction?,
+    extractionStatus: String?,
     onProcess: () -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
-    onManualEntry: () -> Unit,
+    onManualEntry: (ValidatedTransactionExtraction?) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -521,23 +535,9 @@ private fun SmartScanScreen(
                             }
                         }
                     }
+                    item { ExtractionReviewCard(extractionReview, extractionStatus) }
                     item {
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Draft transaksi", style = MaterialTheme.typography.titleMedium)
-                                Text("Tanggal: belum diekstrak", color = MaterialTheme.colorScheme.error)
-                                Text("Jumlah: belum diekstrak", color = MaterialTheme.colorScheme.error)
-                                Text("Pembayaran: belum diekstrak", color = MaterialTheme.colorScheme.error)
-                                Text("Kategori: belum diekstrak", color = MaterialTheme.colorScheme.error)
-                                Text(
-                                    "Phase 7 hanya membaca teks. Ekstraksi lokal dan penanda confidence ditambahkan pada Phase 8.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
-                    }
-                    item {
-                        Button(onClick = onManualEntry, modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = { onManualEntry(extractionReview) }, modifier = Modifier.fillMaxWidth()) {
                             Text("Isi transaksi manual")
                         }
                     }
@@ -548,6 +548,135 @@ private fun SmartScanScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ExtractionReviewCard(
+    review: ValidatedTransactionExtraction?,
+    extractionStatus: String?,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Draft transaksi", style = MaterialTheme.typography.titleMedium)
+            if (review == null) {
+                Text("Menyiapkan validasi draft…")
+                return@Column
+            }
+            val extraction = review.extraction
+            extractionStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            review.issues
+                .filter {
+                    it.field == ExtractionFieldName.SCHEMA ||
+                        it.field == ExtractionFieldName.MASTER_DATA
+                }
+                .forEach { issue ->
+                    Text(
+                        issue.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            ExtractionFieldRow(
+                label = "Tanggal",
+                field = extraction.date,
+                display = extraction.date.value,
+                fieldName = ExtractionFieldName.DATE,
+                review = review,
+            )
+            ExtractionFieldRow(
+                label = "Jumlah",
+                field = extraction.amountIdr,
+                display = extraction.amountIdr.value?.let(::formatIdr),
+                fieldName = ExtractionFieldName.AMOUNT_IDR,
+                review = review,
+                alternativeDisplay = ::formatIdr,
+            )
+            ExtractionFieldRow(
+                label = "Tipe",
+                field = extraction.transactionType,
+                display = extraction.transactionType.value,
+                fieldName = ExtractionFieldName.TRANSACTION_TYPE,
+                review = review,
+            )
+            ExtractionFieldRow(
+                label = "Pembayaran",
+                field = extraction.paymentMethod,
+                display = extraction.paymentMethod.value,
+                fieldName = ExtractionFieldName.PAYMENT_METHOD,
+                review = review,
+            )
+            ExtractionFieldRow(
+                label = "Kategori",
+                field = extraction.category,
+                display = extraction.category.value,
+                fieldName = ExtractionFieldName.CATEGORY,
+                review = review,
+            )
+            extraction.merchant.value?.let {
+                ExtractionFieldRow(
+                    label = "Merchant",
+                    field = extraction.merchant,
+                    display = it,
+                    fieldName = ExtractionFieldName.MERCHANT,
+                    review = review,
+                )
+            }
+            extraction.description.value?.let {
+                ExtractionFieldRow(
+                    label = "Keterangan",
+                    field = extraction.description,
+                    display = it,
+                    fieldName = ExtractionFieldName.DESCRIPTION,
+                    review = review,
+                )
+            }
+            extraction.warnings.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+    }
+}
+
+@Composable
+private fun <T> ExtractionFieldRow(
+    label: String,
+    field: ExtractedField<T>,
+    display: String?,
+    fieldName: ExtractionFieldName,
+    review: ValidatedTransactionExtraction,
+    alternativeDisplay: (T) -> String = { it.toString() },
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("$label: ${display ?: "belum tersedia"}")
+            confidenceLabel(field.confidence)?.let { labelText ->
+                Text(
+                    labelText,
+                    color = when (field.confidence) {
+                        ExtractionConfidence.MEDIUM -> MaterialTheme.colorScheme.tertiary
+                        ExtractionConfidence.LOW, ExtractionConfidence.MISSING -> MaterialTheme.colorScheme.error
+                        ExtractionConfidence.HIGH -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
+        field.evidence?.let { Text("Bukti: $it", style = MaterialTheme.typography.bodySmall) }
+        if (field.alternatives.isNotEmpty()) {
+            Text(
+                "Alternatif: ${field.alternatives.joinToString { alternativeDisplay(it) }}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        review.issues.filter { it.field == fieldName }.forEach { issue ->
+            Text(issue.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+private fun confidenceLabel(confidence: ExtractionConfidence): String? = when (confidence) {
+    ExtractionConfidence.HIGH -> null
+    ExtractionConfidence.MEDIUM -> "Periksa"
+    ExtractionConfidence.LOW -> "Keyakinan rendah"
+    ExtractionConfidence.MISSING -> "Wajib diisi"
 }
 
 private fun scanSourceLabel(source: ScanImageSource): String = when (source) {
@@ -696,16 +825,31 @@ private fun TransactionRow(transaction: LocalTransaction, onClick: () -> Unit) {
 @Composable
 private fun TransactionEditor(
     transaction: LocalTransaction?,
+    initialExtraction: ValidatedTransactionExtraction?,
     master: MasterData?,
     onBack: () -> Unit,
     onSave: (TransactionDraft) -> Unit,
 ) {
-    var date by rememberSaveable(transaction?.transactionId) { mutableStateOf(transaction?.draft?.date ?: LocalDate.now().toString()) }
-    var type by rememberSaveable(transaction?.transactionId) { mutableStateOf(transaction?.draft?.type ?: "Pengeluaran") }
-    var payment by rememberSaveable(transaction?.transactionId) { mutableStateOf(transaction?.draft?.paymentMethod ?: "") }
-    var category by rememberSaveable(transaction?.transactionId) { mutableStateOf(transaction?.draft?.category ?: "") }
-    var amount by rememberSaveable(transaction?.transactionId) { mutableStateOf(transaction?.draft?.amountIdr?.toString() ?: "") }
-    var description by rememberSaveable(transaction?.transactionId) { mutableStateOf(transaction?.draft?.description ?: "") }
+    val extracted = initialExtraction?.extraction
+    val editorKey = transaction?.transactionId ?: extracted?.hashCode()
+    var date by rememberSaveable(editorKey) {
+        mutableStateOf(transaction?.draft?.date ?: extracted?.date?.value ?: LocalDate.now().toString())
+    }
+    var type by rememberSaveable(editorKey) {
+        mutableStateOf(transaction?.draft?.type ?: extracted?.transactionType?.value ?: "Pengeluaran")
+    }
+    var payment by rememberSaveable(editorKey) {
+        mutableStateOf(transaction?.draft?.paymentMethod ?: extracted?.paymentMethod?.value ?: "")
+    }
+    var category by rememberSaveable(editorKey) {
+        mutableStateOf(transaction?.draft?.category ?: extracted?.category?.value ?: "")
+    }
+    var amount by rememberSaveable(editorKey) {
+        mutableStateOf(transaction?.draft?.amountIdr?.toString() ?: extracted?.amountIdr?.value?.toString() ?: "")
+    }
+    var description by rememberSaveable(editorKey) {
+        mutableStateOf(transaction?.draft?.description ?: extracted?.description?.value ?: "")
+    }
     val categories = master?.categories?.filter { it.kind == type }?.map { it.name }.orEmpty()
     val validDate = runCatching { LocalDate.parse(date) }.isSuccess
     val staysInWorkbook = transaction?.revision == null || date.take(4) == transaction.draft.date.take(4)
@@ -716,6 +860,14 @@ private fun TransactionEditor(
             Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (initialExtraction != null) {
+                item {
+                    Text(
+                        "Periksa semua nilai hasil Smart Scan sebelum menyimpan.",
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+            }
             item { OutlinedTextField(date, { date = it }, label = { Text("Tanggal (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth()) }
             item { SelectionField("Tipe", type, master?.transactionTypes.orEmpty()) { type = it; category = "" } }
             item { SelectionField("Pembayaran", payment, master?.paymentMethods.orEmpty()) { payment = it } }

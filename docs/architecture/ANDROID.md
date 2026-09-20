@@ -180,6 +180,19 @@ Camera captures live only in private cache and are deleted after use. The Phase
 7 result deliberately leaves financial fields missing; semantic extraction and
 confidence assignment belong to Phase 8.
 
+Phase 8B adds a local extraction module around a pinned LiteRT-LM Android
+adapter. Starting a scan begins model initialization in the application
+background scope while OCR runs. The per-scan request waits for that shared
+initialization, performs one structured extraction, validates it against
+Master, and then releases its lease. The model remains resident for at most 60
+idle seconds and is unloaded when no scan request remains. Missing/incompatible
+models or malformed output never fail OCR or manual entry; they produce an
+explicit unavailable/failure status and an incomplete review draft.
+
+The model is not loaded by application startup, login, Home, manual entry, or
+sync. No model artifact is bundled or committed while candidate benchmarking is
+open.
+
 ## 10. UI style
 
 Minimal but not visually dead:

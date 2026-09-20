@@ -71,9 +71,13 @@ image gate, is in `docs/development/EMULATOR_PHASE5_6_SMOKE.md`.
 
 Home exposes local OCR through **Pilih gambar** and **Kamera**; sharing an image
 to Lajur enters the same pipeline after the app-lock gate. The Latin OCR model is
-bundled in the APK and does not upload the image or recognized text. Phase 7
-shows raw OCR and an intentionally incomplete draft; structured extraction is a
-Phase 8 concern.
+bundled in the APK and does not upload the image or recognized text.
+
+Phase 8A/8B add the structured extraction contract, deterministic Master
+validation, and a lazy LiteRT-LM adapter. No LLM artifact is bundled yet; when
+the private model file is absent, OCR and manual entry continue normally with a
+clear unavailable status. See `docs/development/PHASE8_LOCAL_MODEL.md` for the
+fixed development path and physical-device benchmark procedure.
 
 See `docs/development/PHASE7_SMART_SCAN_SMOKE.md` for the manual and opt-in
 offline OCR checks.
