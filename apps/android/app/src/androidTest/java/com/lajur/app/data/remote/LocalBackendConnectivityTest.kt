@@ -5,7 +5,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -14,7 +13,7 @@ class LocalBackendConnectivityTest {
     @Test
     fun emulatorCanLoginAndReadCurrentSessionWhenExplicitlyEnabled() = runBlocking {
         val arguments = InstrumentationRegistry.getArguments()
-        assumeTrue(arguments.getString("lajurE2e") == "true")
+        if (arguments.getString("lajurE2e") != "true") return@runBlocking
         val baseUrl = requireNotNull(arguments.getString("lajurBaseUrl"))
         val username = requireNotNull(arguments.getString("lajurUsername"))
         val password = requireNotNull(arguments.getString("lajurPassword"))

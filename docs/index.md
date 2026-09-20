@@ -24,6 +24,7 @@
 
 - [Local development setup](development/LOCAL_SETUP.md)
 - [Phase 5/6 emulator smoke test](development/EMULATOR_PHASE5_6_SMOKE.md)
+- [Phase 7 Smart Scan smoke test](development/PHASE7_SMART_SCAN_SMOKE.md)
 - [Known issues](development/KNOWN_ISSUES.md)
 
 ## Operations
@@ -53,3 +54,4 @@
 - [Glossary](reference/GLOSSARY.md)
 - [Open questions](reference/OPEN_QUESTIONS.md)
 - [Research notes](reference/RESEARCH_NOTES.md)
+- [OCR baseline](reference/OCR_BASELINE.md)

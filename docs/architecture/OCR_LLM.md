@@ -204,6 +204,12 @@ Selection criteria:
 
 Do not choose solely from synthetic benchmarks.
 
+Phase 7 implements the first baseline with the bundled Latin ML Kit recognizer
+behind the project-owned `OcrEngine` interface. Input decoding and EXIF
+orientation live behind a separate `ImagePreprocessor` interface. This choice
+proves the local/offline pipeline but does not close the comparative engine
+benchmark; see `docs/reference/OCR_BASELINE.md`.
+
 ## 11. Evaluation dataset
 
 Build a private/sanitized evaluation set covering:

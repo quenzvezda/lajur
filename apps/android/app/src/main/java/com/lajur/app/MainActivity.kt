@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.os.Build
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
@@ -14,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import android.view.WindowManager
 import com.lajur.app.security.BiometricUnlockController
+import com.lajur.app.scan.ScanImageSource
 import com.lajur.app.ui.LajurApp
 import com.lajur.app.ui.LajurViewModel
 import com.lajur.app.ui.theme.LajurTheme
@@ -26,6 +29,18 @@ class MainActivity : FragmentActivity() {
         LajurViewModel.Factory((application as LajurApplication).container)
     }
     private lateinit var biometricController: BiometricUnlockController
+    private var pendingCaptureUri: Uri? = null
+    private val imagePicker = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let { viewModel.selectScanImage(it.toString(), ScanImageSource.GALLERY) }
+    }
+    private val camera = registerForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        val uri = pendingCaptureUri.also { pendingCaptureUri = null } ?: return@registerForActivityResult
+        if (saved) {
+            viewModel.selectScanImage(uri.toString(), ScanImageSource.CAMERA)
+        } else {
+            (application as LajurApplication).container.temporaryCaptureStore.release(uri.toString())
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +51,16 @@ class MainActivity : FragmentActivity() {
         acceptSharedImage(intent)
         setContent {
             LajurTheme {
-                LajurApp(viewModel, biometricController::authenticate)
+                LajurApp(
+                    viewModel = viewModel,
+                    authenticate = biometricController::authenticate,
+                    pickImage = {
+                        imagePicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                    takePhoto = ::takePhoto,
+                )
             }
         }
         lifecycleScope.launch {
@@ -74,6 +98,12 @@ class MainActivity : FragmentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             setRecentsScreenshotEnabled(!enabled)
         }
+    }
+
+    private fun takePhoto() {
+        val uri = (application as LajurApplication).container.temporaryCaptureStore.createUri()
+        pendingCaptureUri = uri
+        camera.launch(uri)
     }
 
     @Suppress("DEPRECATION")

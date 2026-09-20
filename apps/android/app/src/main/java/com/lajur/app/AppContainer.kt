@@ -6,6 +6,10 @@ import com.lajur.app.data.SessionRepository
 import com.lajur.app.data.local.LajurDatabase
 import com.lajur.app.security.SecureSessionStore
 import com.lajur.app.security.AppLockSettingsStore
+import com.lajur.app.scan.AndroidImagePreprocessor
+import com.lajur.app.scan.MlKitOcrEngine
+import com.lajur.app.scan.SmartScanPipeline
+import com.lajur.app.scan.TemporaryCaptureStore
 import com.lajur.app.sync.SyncProcessor
 import com.lajur.app.sync.SyncScheduler
 import kotlinx.serialization.json.Json
@@ -18,6 +22,10 @@ class AppContainer(context: Context) {
     }
     val database = LajurDatabase.create(context)
     val appLockSettingsStore = AppLockSettingsStore(context)
+    val temporaryCaptureStore = TemporaryCaptureStore(context)
+    val smartScanPipeline by lazy {
+        SmartScanPipeline(AndroidImagePreprocessor(context), MlKitOcrEngine())
+    }
     val scheduler = SyncScheduler(context)
     val sessionRepository = SessionRepository(
         SecureSessionStore(context, json),

@@ -171,6 +171,15 @@ AND-001.
 Incoming image shares retain only an in-memory URI until unlock; image decoding
 starts in Phase 7.
 
+Phase 7 turns Gallery, system Camera, and image Share Intents into a single
+in-memory Smart Scan request. A bounded preprocessor accepts granted
+`content://` URIs, validates size/dimensions, downsamples to a 2048-pixel edge,
+and applies EXIF orientation. A project-owned generic pipeline invokes the
+bundled local OCR engine and releases bitmap memory before presenting OCR text.
+Camera captures live only in private cache and are deleted after use. The Phase
+7 result deliberately leaves financial fields missing; semantic extraction and
+confidence assignment belong to Phase 8.
+
 ## 10. UI style
 
 Minimal but not visually dead:

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -53,6 +54,8 @@ import com.lajur.app.domain.SyncState
 import com.lajur.app.domain.TransactionDraft
 import com.lajur.app.security.AppLockSettings
 import com.lajur.app.security.AppLockStatus
+import com.lajur.app.scan.ScanImageSource
+import com.lajur.app.scan.SmartScanState
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.YearMonth
@@ -62,6 +65,7 @@ import java.util.Locale
 private sealed interface AppScreen {
     data object Home : AppScreen
     data object Settings : AppScreen
+    data object SmartScan : AppScreen
     data class Editor(val transaction: LocalTransaction?) : AppScreen
     data class Detail(val transaction: LocalTransaction) : AppScreen
 }
@@ -70,6 +74,8 @@ private sealed interface AppScreen {
 fun LajurApp(
     viewModel: LajurViewModel,
     authenticate: (Boolean, () -> Unit, (String) -> Unit) -> Unit,
+    pickImage: () -> Unit,
+    takePhoto: () -> Unit,
 ) {
     val session by viewModel.session.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
@@ -98,7 +104,7 @@ fun LajurApp(
             AppLockStatus.UNLOCKED -> if (state.needsWorkbookOnboarding) {
                 OnboardingScreen(busy, { viewModel.createWorkbook() }, viewModel::signOut)
             } else {
-                SignedInApp(viewModel, state, authenticate)
+                SignedInApp(viewModel, state, authenticate, pickImage, takePhoto)
             }
         }
     }
@@ -109,6 +115,8 @@ private fun SignedInApp(
     viewModel: LajurViewModel,
     session: SessionState.SignedIn,
     authenticate: (Boolean, () -> Unit, (String) -> Unit) -> Unit,
+    pickImage: () -> Unit,
+    takePhoto: () -> Unit,
 ) {
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val summary by viewModel.summary.collectAsStateWithLifecycle()
@@ -119,6 +127,7 @@ private fun SignedInApp(
     val message by viewModel.message.collectAsStateWithLifecycle()
     val lockSettings by viewModel.appLockSettings.collectAsStateWithLifecycle()
     val pendingSharedImage by viewModel.pendingSharedImage.collectAsStateWithLifecycle()
+    val smartScanState by viewModel.smartScanState.collectAsStateWithLifecycle()
     var screen: AppScreen by remember { mutableStateOf(AppScreen.Home) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -127,6 +136,11 @@ private fun SignedInApp(
             snackbar.showSnackbar(it)
             viewModel.clearMessage()
         }
+    }
+
+    LaunchedEffect(smartScanState) {
+        if (smartScanState is SmartScanState.Ready) screen = AppScreen.SmartScan
+        if (smartScanState is SmartScanState.Idle && screen == AppScreen.SmartScan) screen = AppScreen.Home
     }
 
     when (val current = screen) {
@@ -149,6 +163,9 @@ private fun SignedInApp(
             onCreateWorkbook = { viewModel.createWorkbook(month.year) },
             onAdd = { screen = AppScreen.Editor(null) },
             onTransaction = { screen = AppScreen.Detail(it) },
+            onPickImage = pickImage,
+            onTakePhoto = takePhoto,
+            onOpenSharedImage = { screen = AppScreen.SmartScan },
             onDiscardSharedImage = viewModel::discardSharedImage,
             onSettings = { screen = AppScreen.Settings },
             onSignOut = viewModel::signOut,
@@ -178,6 +195,19 @@ private fun SignedInApp(
             onTimeout = viewModel::setAppLockTimeout,
             onScreenProtection = viewModel::setScreenProtectionEnabled,
             onLockNow = viewModel::lockNow,
+        )
+        AppScreen.SmartScan -> SmartScanScreen(
+            state = smartScanState,
+            onProcess = viewModel::processScan,
+            onRetry = viewModel::processScan,
+            onBack = {
+                viewModel.discardScan()
+                screen = AppScreen.Home
+            },
+            onManualEntry = {
+                viewModel.discardScan()
+                screen = AppScreen.Editor(null)
+            },
         )
         is AppScreen.Editor -> TransactionEditor(
             transaction = current.transaction,
@@ -305,6 +335,9 @@ private fun HomeScreen(
     onCreateWorkbook: () -> Unit,
     onAdd: () -> Unit,
     onTransaction: (LocalTransaction) -> Unit,
+    onPickImage: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onOpenSharedImage: () -> Unit,
     onDiscardSharedImage: () -> Unit,
     onSettings: () -> Unit,
     onSignOut: () -> Unit,
@@ -361,8 +394,21 @@ private fun HomeScreen(
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
                             Text("Gambar diterima", style = MaterialTheme.typography.titleMedium)
-                            Text("Gambar aman ditahan setelah unlock. Pemrosesan Smart Scan ditambahkan pada Phase 7.")
+                            Text("Gambar aman ditahan setelah unlock dan siap diproses secara lokal.")
+                            Button(onClick = onOpenSharedImage) { Text("Buka Smart Scan") }
                             TextButton(onClick = onDiscardSharedImage) { Text("Buang gambar") }
+                        }
+                    }
+                }
+            }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Smart Scan", style = MaterialTheme.typography.titleMedium)
+                        Text("OCR berjalan di perangkat. Gambar dan teks tidak dikirim ke server.")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = onPickImage) { Text("Pilih gambar") }
+                            OutlinedButton(onClick = onTakePhoto) { Text("Kamera") }
                         }
                     }
                 }
@@ -398,6 +444,116 @@ private fun HomeScreen(
             item { Spacer(Modifier.height(80.dp)) }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SmartScanScreen(
+    state: SmartScanState,
+    onProcess: () -> Unit,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+    onManualEntry: () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Smart Scan") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Kembali") } },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            when (state) {
+                SmartScanState.Idle -> item { Text("Tidak ada gambar yang dipilih.") }
+                is SmartScanState.Ready -> {
+                    item {
+                        LaunchedEffect(state.request) { onProcess() }
+                        Text("Menyiapkan gambar…")
+                    }
+                }
+                is SmartScanState.Processing -> item {
+                    Column(
+                        Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        CircularProgressIndicator()
+                        Text("Membaca teks secara lokal…")
+                        Text(scanSourceLabel(state.request.source), style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = onBack) { Text("Batalkan") }
+                    }
+                }
+                is SmartScanState.Failed -> {
+                    item { Text("OCR gagal", style = MaterialTheme.typography.headlineSmall) }
+                    item { Text(state.message, color = MaterialTheme.colorScheme.error) }
+                    item {
+                        Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Coba lagi") }
+                    }
+                    item {
+                        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Buang gambar") }
+                    }
+                }
+                is SmartScanState.Complete -> {
+                    val output = state.output
+                    item {
+                        Text("Teks berhasil dibaca", style = MaterialTheme.typography.headlineSmall)
+                        Text(
+                            "${output.image.originalWidth}×${output.image.originalHeight} → " +
+                                "${output.image.processedWidth}×${output.image.processedHeight} · " +
+                                "OCR ${output.ocr.recognitionMillis} ms",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    output.warnings.forEach { warning ->
+                        item { Text(warning, color = MaterialTheme.colorScheme.error) }
+                    }
+                    item {
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Hasil OCR", style = MaterialTheme.typography.titleMedium)
+                                SelectionContainer {
+                                    Text(output.ocr.text.ifBlank { "Tidak ada teks yang terbaca." })
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Draft transaksi", style = MaterialTheme.typography.titleMedium)
+                                Text("Tanggal: belum diekstrak", color = MaterialTheme.colorScheme.error)
+                                Text("Jumlah: belum diekstrak", color = MaterialTheme.colorScheme.error)
+                                Text("Pembayaran: belum diekstrak", color = MaterialTheme.colorScheme.error)
+                                Text("Kategori: belum diekstrak", color = MaterialTheme.colorScheme.error)
+                                Text(
+                                    "Phase 7 hanya membaca teks. Ekstraksi lokal dan penanda confidence ditambahkan pada Phase 8.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                    item {
+                        Button(onClick = onManualEntry, modifier = Modifier.fillMaxWidth()) {
+                            Text("Isi transaksi manual")
+                        }
+                    }
+                    item {
+                        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Buang hasil") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun scanSourceLabel(source: ScanImageSource): String = when (source) {
+    ScanImageSource.SHARE -> "Sumber: dibagikan ke Lajur"
+    ScanImageSource.GALLERY -> "Sumber: galeri"
+    ScanImageSource.CAMERA -> "Sumber: kamera"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

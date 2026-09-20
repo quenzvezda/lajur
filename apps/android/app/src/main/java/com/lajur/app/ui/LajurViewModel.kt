@@ -15,6 +15,10 @@ import com.lajur.app.domain.TransactionDraft
 import com.lajur.app.security.AppLockSettings
 import com.lajur.app.security.AppLockStateMachine
 import com.lajur.app.security.AppLockStatus
+import com.lajur.app.scan.ScanImageRequest
+import com.lajur.app.scan.ScanImageSource
+import com.lajur.app.scan.SmartScanState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +39,9 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     val appLockSettings: StateFlow<AppLockSettings> = mutableAppLockSettings.asStateFlow()
     private val mutablePendingSharedImage = MutableStateFlow<String?>(null)
     val pendingSharedImage: StateFlow<String?> = mutablePendingSharedImage.asStateFlow()
+    private val mutableSmartScanState = MutableStateFlow<SmartScanState>(SmartScanState.Idle)
+    val smartScanState: StateFlow<SmartScanState> = mutableSmartScanState.asStateFlow()
+    private var smartScanJob: Job? = null
     private val mutableMonth = MutableStateFlow(YearMonth.now())
     val month: StateFlow<YearMonth> = mutableMonth.asStateFlow()
     private val mutableQuery = MutableStateFlow("")
@@ -187,10 +194,54 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
 
     fun onSharedImage(uri: String) {
         mutablePendingSharedImage.value = uri
+        selectScanImage(uri, ScanImageSource.SHARE)
     }
 
     fun discardSharedImage() {
+        discardScan()
+    }
+
+    fun selectScanImage(uri: String, source: ScanImageSource) {
+        releaseTemporaryCapture(currentScanRequest())
+        smartScanJob?.cancel()
+        val request = ScanImageRequest(uri, source)
+        mutableSmartScanState.value = SmartScanState.Ready(request)
+        mutablePendingSharedImage.value = if (source == ScanImageSource.SHARE) uri else null
+    }
+
+    fun processScan() {
+        val request = when (val state = mutableSmartScanState.value) {
+            is SmartScanState.Ready -> state.request
+            is SmartScanState.Failed -> state.request
+            else -> return
+        }
+        smartScanJob?.cancel()
         mutablePendingSharedImage.value = null
+        mutableSmartScanState.value = SmartScanState.Processing(request)
+        smartScanJob = viewModelScope.launch {
+            runCatching { container.smartScanPipeline.process(request) }
+                .onSuccess { output ->
+                    if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request == request) {
+                        mutableSmartScanState.value = SmartScanState.Complete(output)
+                        releaseTemporaryCapture(request)
+                    }
+                }
+                .onFailure { error ->
+                    if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request == request) {
+                        mutableSmartScanState.value = SmartScanState.Failed(
+                            request,
+                            error.message ?: "OCR tidak dapat memproses gambar.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun discardScan() {
+        smartScanJob?.cancel()
+        releaseTemporaryCapture(currentScanRequest())
+        mutablePendingSharedImage.value = null
+        mutableSmartScanState.value = SmartScanState.Idle
     }
 
     fun clearMessage() {
@@ -216,6 +267,20 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun publishAppLockStatus() {
         mutableAppLockStatus.value = appLockStateMachine.status
+    }
+
+    private fun currentScanRequest(): ScanImageRequest? = when (val state = mutableSmartScanState.value) {
+        is SmartScanState.Ready -> state.request
+        is SmartScanState.Processing -> state.request
+        is SmartScanState.Complete -> state.output.request
+        is SmartScanState.Failed -> state.request
+        SmartScanState.Idle -> null
+    }
+
+    private fun releaseTemporaryCapture(request: ScanImageRequest?) {
+        if (request?.source == ScanImageSource.CAMERA) {
+            container.temporaryCaptureStore.release(request.uri)
+        }
     }
 
     class Factory(private val container: AppContainer) : ViewModelProvider.Factory {

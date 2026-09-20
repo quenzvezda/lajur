@@ -67,6 +67,17 @@ The complete emulator runbook, including virtual fingerprint enrollment,
 app-lock timeout, Recents privacy, background sync while locked, and the incoming
 image gate, is in `docs/development/EMULATOR_PHASE5_6_SMOKE.md`.
 
+## Phase 7 Smart Scan
+
+Home exposes local OCR through **Pilih gambar** and **Kamera**; sharing an image
+to Lajur enters the same pipeline after the app-lock gate. The Latin OCR model is
+bundled in the APK and does not upload the image or recognized text. Phase 7
+shows raw OCR and an intentionally incomplete draft; structured extraction is a
+Phase 8 concern.
+
+See `docs/development/PHASE7_SMART_SCAN_SMOKE.md` for the manual and opt-in
+offline OCR checks.
+
 ## Local security
 
 The refresh credential is encrypted with an AES-GCM key held by Android
