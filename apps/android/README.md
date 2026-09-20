@@ -7,9 +7,17 @@ files directly.
 
 ## Local API address
 
-Debug builds default to `http://10.0.2.2:8080/api/v1/`, which reaches port 8080
-on the development computer from the Android Emulator. The login screen keeps
-the server field editable.
+Debug builds default to `http://127.0.0.1:8080/api/v1/`. Before using a local
+Docker backend from an emulator or USB-connected device, forward the port once
+for the current ADB session:
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse tcp:8080 tcp:8080
+```
+
+The login screen keeps the server field editable. `adb reverse` is preferred
+over the emulator-only `10.0.2.2` alias because a backend bound to the Windows
+loopback interface is not reachable through that alias on every Docker setup.
 
 For a physical device, use the development computer's LAN address, for example
 `http://192.168.1.10:8080/api/v1/`, and make the API listen on that interface.
@@ -35,6 +43,10 @@ Android Studio Device Manager or connecting a USB-debuggable device:
 .\gradlew.bat connectedDebugAndroidTest
 ```
 
+An opt-in device-to-backend login probe is also available. It requires a local
+test account and accepts credentials only as transient instrumentation
+arguments; do not put credentials in source files.
+
 ## Phase 5 smoke test
 
 1. Run the API, install its workbook template, and create an operator account.
@@ -50,6 +62,10 @@ Android Studio Device Manager or connecting a USB-debuggable device:
 
 Repeat with an offline edit and delete. A transaction created and then deleted
 before its first sync should disappear locally without ever reaching the API.
+
+The complete emulator runbook, including virtual fingerprint enrollment,
+app-lock timeout, Recents privacy, background sync while locked, and the incoming
+image gate, is in `docs/development/EMULATOR_PHASE5_6_SMOKE.md`.
 
 ## Local security
 

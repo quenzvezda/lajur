@@ -22,7 +22,7 @@ android {
         buildConfigField(
             "String",
             "LAJUR_API_BASE_URL",
-            "\"${providers.gradleProperty("LAJUR_API_BASE_URL").orElse("http://10.0.2.2:8080/api/v1/").get()}\""
+            "\"${providers.gradleProperty("LAJUR_API_BASE_URL").orElse("http://127.0.0.1:8080/api/v1/").get()}\""
         )
     }
 
@@ -65,6 +65,8 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.biometric)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)

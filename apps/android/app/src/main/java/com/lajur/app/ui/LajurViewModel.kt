@@ -3,6 +3,7 @@ package com.lajur.app.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import android.os.SystemClock
 import com.lajur.app.AppContainer
 import com.lajur.app.BuildConfig
 import com.lajur.app.data.SessionState
@@ -11,6 +12,9 @@ import com.lajur.app.domain.MasterData
 import com.lajur.app.domain.MonthSummary
 import com.lajur.app.domain.SyncCounts
 import com.lajur.app.domain.TransactionDraft
+import com.lajur.app.security.AppLockSettings
+import com.lajur.app.security.AppLockStateMachine
+import com.lajur.app.security.AppLockStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,7 +27,14 @@ import java.time.YearMonth
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class LajurViewModel(private val container: AppContainer) : ViewModel() {
+    private val appLockStateMachine = AppLockStateMachine()
     val session = container.sessionRepository.state
+    private val mutableAppLockStatus = MutableStateFlow(AppLockStatus.RESTORING)
+    val appLockStatus: StateFlow<AppLockStatus> = mutableAppLockStatus.asStateFlow()
+    private val mutableAppLockSettings = MutableStateFlow(AppLockSettings())
+    val appLockSettings: StateFlow<AppLockSettings> = mutableAppLockSettings.asStateFlow()
+    private val mutablePendingSharedImage = MutableStateFlow<String?>(null)
+    val pendingSharedImage: StateFlow<String?> = mutablePendingSharedImage.asStateFlow()
     private val mutableMonth = MutableStateFlow(YearMonth.now())
     val month: StateFlow<YearMonth> = mutableMonth.asStateFlow()
     private val mutableQuery = MutableStateFlow("")
@@ -50,6 +61,17 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     val defaultServerUrl: String = BuildConfig.LAJUR_API_BASE_URL
 
     init {
+        viewModelScope.launch {
+            container.appLockSettingsStore.settings.collect { settings ->
+                if (appLockStateMachine.status == AppLockStatus.RESTORING) {
+                    appLockStateMachine.restore(settings)
+                } else {
+                    appLockStateMachine.updateSettings(settings)
+                }
+                mutableAppLockSettings.value = settings
+                publishAppLockStatus()
+            }
+        }
         viewModelScope.launch { container.sessionRepository.restore() }
         viewModelScope.launch {
             session.collect { state ->
@@ -126,6 +148,51 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch { container.sessionRepository.signOut() }
     }
 
+    fun onAppBackgrounded(nowMillis: Long = SystemClock.elapsedRealtime()) {
+        appLockStateMachine.onBackgrounded(nowMillis)
+        publishAppLockStatus()
+    }
+
+    fun onAppForegrounded(nowMillis: Long = SystemClock.elapsedRealtime()) {
+        appLockStateMachine.onForegrounded(nowMillis)
+        publishAppLockStatus()
+    }
+
+    fun onUnlockSucceeded() {
+        appLockStateMachine.authenticationSucceeded()
+        publishAppLockStatus()
+    }
+
+    fun setAppLockEnabled(enabled: Boolean) {
+        if (enabled) appLockStateMachine.authenticationSucceeded()
+        updateAppLockSettings { it.copy(enabled = enabled) }
+    }
+
+    fun setDeviceCredentialFallback(enabled: Boolean) {
+        updateAppLockSettings { it.copy(deviceCredentialFallback = enabled) }
+    }
+
+    fun setAppLockTimeout(timeoutMillis: Long) {
+        updateAppLockSettings { it.copy(timeoutMillis = timeoutMillis) }
+    }
+
+    fun setScreenProtectionEnabled(enabled: Boolean) {
+        updateAppLockSettings { it.copy(screenProtectionEnabled = enabled) }
+    }
+
+    fun lockNow() {
+        appLockStateMachine.lockNow()
+        publishAppLockStatus()
+    }
+
+    fun onSharedImage(uri: String) {
+        mutablePendingSharedImage.value = uri
+    }
+
+    fun discardSharedImage() {
+        mutablePendingSharedImage.value = null
+    }
+
     fun clearMessage() {
         mutableMessage.value = null
     }
@@ -139,6 +206,16 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
                 mutableBusy.value = false
             }
         }
+    }
+
+    private fun updateAppLockSettings(transform: (AppLockSettings) -> AppLockSettings) {
+        viewModelScope.launch {
+            container.appLockSettingsStore.update(transform(mutableAppLockSettings.value))
+        }
+    }
+
+    private fun publishAppLockStatus() {
+        mutableAppLockStatus.value = appLockStateMachine.status
     }
 
     class Factory(private val container: AppContainer) : ViewModelProvider.Factory {

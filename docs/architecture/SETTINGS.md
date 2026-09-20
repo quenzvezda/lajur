@@ -17,8 +17,7 @@ Three categories:
 | Biometric unlock | ON after user opts in |
 | Auto lock | 5 minutes |
 | Device credential fallback | ON |
-| Hide content in Recents | ON |
-| Allow screenshots | OFF |
+| Protect screen and Recent Apps | ON (currently affected by AND-001) |
 
 ### Sync
 

@@ -23,6 +23,8 @@
 ## Development
 
 - [Local development setup](development/LOCAL_SETUP.md)
+- [Phase 5/6 emulator smoke test](development/EMULATOR_PHASE5_6_SMOKE.md)
+- [Known issues](development/KNOWN_ISSUES.md)
 
 ## Operations
 

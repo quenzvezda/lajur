@@ -157,6 +157,20 @@ Suggested logic:
 - successful BiometricPrompt refreshes local unlocked timestamp;
 - background WorkManager does not route through UI lock.
 
+Phase 6 implements this as a pure timeout state machine wrapped by a DataStore
+settings adapter. The Activity reports monotonic foreground/background times;
+the signed-in Compose tree is not created while locked. AndroidX
+`BiometricPrompt` performs biometric/device-credential authentication, while
+WorkManager and the Keystore-backed refresh session remain independent of that
+foreground gate. Screen protection is enabled by default but user-configurable:
+`FLAG_SECURE` protects screenshots and, on Android 13+, the Activity Recents
+screenshot API explicitly disables task snapshots. Both controls change
+together when the user toggles the setting. This is the intended design, but
+the API 37 AVD acceptance check currently fails; see `development/KNOWN_ISSUES.md`
+AND-001.
+Incoming image shares retain only an in-memory URI until unlock; image decoding
+starts in Phase 7.
+
 ## 10. UI style
 
 Minimal but not visually dead:

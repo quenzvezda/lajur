@@ -5,6 +5,7 @@ import com.lajur.app.data.FinanceRepository
 import com.lajur.app.data.SessionRepository
 import com.lajur.app.data.local.LajurDatabase
 import com.lajur.app.security.SecureSessionStore
+import com.lajur.app.security.AppLockSettingsStore
 import com.lajur.app.sync.SyncProcessor
 import com.lajur.app.sync.SyncScheduler
 import kotlinx.serialization.json.Json
@@ -16,6 +17,7 @@ class AppContainer(context: Context) {
         explicitNulls = false
     }
     val database = LajurDatabase.create(context)
+    val appLockSettingsStore = AppLockSettingsStore(context)
     val scheduler = SyncScheduler(context)
     val sessionRepository = SessionRepository(
         SecureSessionStore(context, json),

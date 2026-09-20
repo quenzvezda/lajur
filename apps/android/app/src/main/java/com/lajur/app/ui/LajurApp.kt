@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -34,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -49,6 +51,8 @@ import com.lajur.app.domain.MasterData
 import com.lajur.app.domain.SyncCounts
 import com.lajur.app.domain.SyncState
 import com.lajur.app.domain.TransactionDraft
+import com.lajur.app.security.AppLockSettings
+import com.lajur.app.security.AppLockStatus
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.YearMonth
@@ -57,27 +61,55 @@ import java.util.Locale
 
 private sealed interface AppScreen {
     data object Home : AppScreen
+    data object Settings : AppScreen
     data class Editor(val transaction: LocalTransaction?) : AppScreen
     data class Detail(val transaction: LocalTransaction) : AppScreen
 }
 
 @Composable
-fun LajurApp(viewModel: LajurViewModel) {
+fun LajurApp(
+    viewModel: LajurViewModel,
+    authenticate: (Boolean, () -> Unit, (String) -> Unit) -> Unit,
+) {
     val session by viewModel.session.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val lockStatus by viewModel.appLockStatus.collectAsStateWithLifecycle()
+    val lockSettings by viewModel.appLockSettings.collectAsStateWithLifecycle()
     when (val state = session) {
         SessionState.Restoring -> LoadingScreen()
-        SessionState.SignedOut -> LoginScreen(viewModel.defaultServerUrl, busy, viewModel::login)
-        is SessionState.SignedIn -> if (state.needsWorkbookOnboarding) {
-            OnboardingScreen(busy, { viewModel.createWorkbook() }, viewModel::signOut)
-        } else {
-            SignedInApp(viewModel, state)
+        SessionState.SignedOut -> LoginScreen(
+            defaultServerUrl = viewModel.defaultServerUrl,
+            busy = busy,
+            errorMessage = message,
+            onLogin = { server, username, password ->
+                viewModel.clearMessage()
+                viewModel.login(server, username, password)
+            },
+        )
+        is SessionState.SignedIn -> when (lockStatus) {
+            AppLockStatus.RESTORING -> LoadingScreen()
+            AppLockStatus.LOCKED -> UnlockScreen(
+                allowDeviceCredential = lockSettings.deviceCredentialFallback,
+                authenticate = authenticate,
+                onUnlocked = viewModel::onUnlockSucceeded,
+                onSignOut = viewModel::signOut,
+            )
+            AppLockStatus.UNLOCKED -> if (state.needsWorkbookOnboarding) {
+                OnboardingScreen(busy, { viewModel.createWorkbook() }, viewModel::signOut)
+            } else {
+                SignedInApp(viewModel, state, authenticate)
+            }
         }
     }
 }
 
 @Composable
-private fun SignedInApp(viewModel: LajurViewModel, session: SessionState.SignedIn) {
+private fun SignedInApp(
+    viewModel: LajurViewModel,
+    session: SessionState.SignedIn,
+    authenticate: (Boolean, () -> Unit, (String) -> Unit) -> Unit,
+) {
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val summary by viewModel.summary.collectAsStateWithLifecycle()
     val master by viewModel.master.collectAsStateWithLifecycle()
@@ -85,6 +117,8 @@ private fun SignedInApp(viewModel: LajurViewModel, session: SessionState.SignedI
     val query by viewModel.query.collectAsStateWithLifecycle()
     val syncCounts by viewModel.syncCounts.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val lockSettings by viewModel.appLockSettings.collectAsStateWithLifecycle()
+    val pendingSharedImage by viewModel.pendingSharedImage.collectAsStateWithLifecycle()
     var screen: AppScreen by remember { mutableStateOf(AppScreen.Home) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -105,6 +139,7 @@ private fun SignedInApp(viewModel: LajurViewModel, session: SessionState.SignedI
             syncCounts = syncCounts,
             offlineSession = session.offline,
             hasWorkbook = month.year in session.workbookYears,
+            hasPendingSharedImage = pendingSharedImage != null,
             snackbar = snackbar,
             onQueryChange = viewModel::setQuery,
             onPreviousMonth = viewModel::previousMonth,
@@ -114,7 +149,35 @@ private fun SignedInApp(viewModel: LajurViewModel, session: SessionState.SignedI
             onCreateWorkbook = { viewModel.createWorkbook(month.year) },
             onAdd = { screen = AppScreen.Editor(null) },
             onTransaction = { screen = AppScreen.Detail(it) },
+            onDiscardSharedImage = viewModel::discardSharedImage,
+            onSettings = { screen = AppScreen.Settings },
             onSignOut = viewModel::signOut,
+        )
+        AppScreen.Settings -> SettingsScreen(
+            settings = lockSettings,
+            onBack = { screen = AppScreen.Home },
+            onEnableRequest = { onError ->
+                authenticate(
+                    lockSettings.deviceCredentialFallback,
+                    { viewModel.setAppLockEnabled(true) },
+                    onError,
+                )
+            },
+            onDisable = { viewModel.setAppLockEnabled(false) },
+            onDeviceCredentialFallbackRequest = { enabled, onError ->
+                if (enabled) {
+                    viewModel.setDeviceCredentialFallback(true)
+                } else {
+                    authenticate(
+                        false,
+                        { viewModel.setDeviceCredentialFallback(false) },
+                        onError,
+                    )
+                }
+            },
+            onTimeout = viewModel::setAppLockTimeout,
+            onScreenProtection = viewModel::setScreenProtectionEnabled,
+            onLockNow = viewModel::lockNow,
         )
         is AppScreen.Editor -> TransactionEditor(
             transaction = current.transaction,
@@ -139,7 +202,38 @@ private fun LoadingScreen() = Box(Modifier.fillMaxSize(), contentAlignment = Ali
 }
 
 @Composable
-private fun LoginScreen(defaultServerUrl: String, busy: Boolean, onLogin: (String, String, String) -> Unit) {
+private fun UnlockScreen(
+    allowDeviceCredential: Boolean,
+    authenticate: (Boolean, () -> Unit, (String) -> Unit) -> Unit,
+    onUnlocked: () -> Unit,
+    onSignOut: () -> Unit,
+) {
+    var attempt by remember { mutableIntStateOf(0) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(attempt) {
+        authenticate(allowDeviceCredential, onUnlocked) { error = it }
+    }
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Lajur terkunci", style = MaterialTheme.typography.headlineMedium)
+        Text("Buka dengan biometrik atau kunci layar perangkat.")
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = { error = null; attempt++ }) { Text("Buka Lajur") }
+        TextButton(onClick = onSignOut) { Text("Keluar dari akun") }
+    }
+}
+
+@Composable
+private fun LoginScreen(
+    defaultServerUrl: String,
+    busy: Boolean,
+    errorMessage: String?,
+    onLogin: (String, String, String) -> Unit,
+) {
     var server by rememberSaveable { mutableStateOf(defaultServerUrl) }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -159,6 +253,10 @@ private fun LoginScreen(defaultServerUrl: String, busy: Boolean, onLogin: (Strin
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
         )
+        errorMessage?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = MaterialTheme.colorScheme.error)
+        }
         Spacer(Modifier.height(16.dp))
         Button(
             onClick = { onLogin(server, username, password) },
@@ -197,6 +295,7 @@ private fun HomeScreen(
     syncCounts: SyncCounts,
     offlineSession: Boolean,
     hasWorkbook: Boolean,
+    hasPendingSharedImage: Boolean,
     snackbar: SnackbarHostState,
     onQueryChange: (String) -> Unit,
     onPreviousMonth: () -> Unit,
@@ -206,10 +305,20 @@ private fun HomeScreen(
     onCreateWorkbook: () -> Unit,
     onAdd: () -> Unit,
     onTransaction: (LocalTransaction) -> Unit,
+    onDiscardSharedImage: () -> Unit,
+    onSettings: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Lajur") }, actions = { TextButton(onClick = onSignOut) { Text("Keluar") } }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Lajur") },
+                actions = {
+                    TextButton(onClick = onSettings) { Text("Pengaturan") }
+                    TextButton(onClick = onSignOut) { Text("Keluar") }
+                },
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             if (hasWorkbook) FloatingActionButton(onClick = onAdd) { Text("+") }
@@ -247,6 +356,17 @@ private fun HomeScreen(
                     }
                 }
             }
+            if (hasPendingSharedImage) {
+                item {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("Gambar diterima", style = MaterialTheme.typography.titleMedium)
+                            Text("Gambar aman ditahan setelah unlock. Pemrosesan Smart Scan ditambahkan pada Phase 7.")
+                            TextButton(onClick = onDiscardSharedImage) { Text("Buang gambar") }
+                        }
+                    }
+                }
+            }
             item {
                 val syncText = when {
                     syncCounts.failed > 0 -> "Error ${syncCounts.failed} — ketuk untuk coba lagi"
@@ -276,6 +396,125 @@ private fun HomeScreen(
                 }
             }
             item { Spacer(Modifier.height(80.dp)) }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsScreen(
+    settings: AppLockSettings,
+    onBack: () -> Unit,
+    onEnableRequest: ((String) -> Unit) -> Unit,
+    onDisable: () -> Unit,
+    onDeviceCredentialFallbackRequest: (Boolean, (String) -> Unit) -> Unit,
+    onTimeout: (Long) -> Unit,
+    onScreenProtection: (Boolean) -> Unit,
+    onLockNow: () -> Unit,
+) {
+    var enableError by remember { mutableStateOf<String?>(null) }
+    val timeoutChoices = listOf(
+        0L to "Segera",
+        60_000L to "1 menit",
+        300_000L to "5 menit",
+        900_000L to "15 menit",
+        1_800_000L to "30 menit",
+    )
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Pengaturan") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Kembali") } },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item { Text("Keamanan", style = MaterialTheme.typography.headlineSmall) }
+            item {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Kunci aplikasi", style = MaterialTheme.typography.titleMedium)
+                        Text("Minta autentikasi saat kembali setelah timeout.")
+                    }
+                    Switch(
+                        checked = settings.enabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) onEnableRequest { enableError = it } else onDisable()
+                        },
+                    )
+                }
+            }
+            enableError?.let { error ->
+                item { Text(error, color = MaterialTheme.colorScheme.error) }
+            }
+            if (settings.enabled) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Fallback kunci perangkat")
+                            Text("Izinkan PIN, pola, atau password perangkat.")
+                        }
+                        Switch(
+                            checked = settings.deviceCredentialFallback,
+                            onCheckedChange = { enabled ->
+                                onDeviceCredentialFallbackRequest(enabled) { enableError = it }
+                            },
+                        )
+                    }
+                }
+                item { Text("Kunci otomatis", style = MaterialTheme.typography.titleMedium) }
+                items(timeoutChoices) { (millis, label) ->
+                    OutlinedButton(
+                        onClick = { onTimeout(millis) },
+                        enabled = settings.timeoutMillis != millis,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (settings.timeoutMillis == millis) "$label (aktif)" else label)
+                    }
+                }
+                item {
+                    Button(onClick = onLockNow, modifier = Modifier.fillMaxWidth()) {
+                        Text("Kunci sekarang")
+                    }
+                }
+            }
+            item { Text("Privasi layar", style = MaterialTheme.typography.headlineSmall) }
+            item {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Lindungi layar & Recent Apps", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (settings.screenProtectionEnabled) {
+                                "Screenshot diblokir dan preview Recent Apps disembunyikan."
+                            } else {
+                                "Screenshot dan preview Recent Apps dapat menampilkan data keuangan."
+                            },
+                        )
+                    }
+                    Switch(
+                        checked = settings.screenProtectionEnabled,
+                        onCheckedChange = onScreenProtection,
+                    )
+                }
+            }
+            item {
+                Text("Perubahan perlindungan layar berlaku langsung.")
+            }
         }
     }
 }

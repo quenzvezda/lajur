@@ -98,6 +98,9 @@ cd apps/android
 The complete Phase 5 offline/restart/reconnect smoke procedure is documented in
 `apps/android/README.md`.
 
+For the combined Phase 5/6 device acceptance procedure, including emulator
+fingerprint setup, see `docs/development/EMULATOR_PHASE5_6_SMOKE.md`.
+
 The Gradle Wrapper JAR and both wrapper scripts are repository files and must be committed. Gradle caches, IDE state, `local.properties`, APK/AAB outputs, and signing material must remain untracked.
 
 IntelliJ IDEA can open Kotlin/Gradle sources, but Android Studio is the recommended Android IDE because it bundles the supported Android tooling, SDK Manager, Device Manager, emulator integration, Compose preview, and layout inspection.
