@@ -33,6 +33,16 @@ Run the API with:
 dotnet run --project src/Lajur.Api
 ```
 
+Create a local operator-managed account before exercising authenticated routes:
+
+```powershell
+cd services/api
+dotnet run --project src/Lajur.Api -- account create --username rama
+```
+
+The command prompts for a password without echoing it. Local auth data and the
+generated JWT signing key live below the ignored `.local/lajur/` directory.
+
 ### Android
 
 Install the latest stable Android Studio and let its Setup Wizard install:

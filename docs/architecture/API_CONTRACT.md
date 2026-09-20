@@ -41,9 +41,15 @@ Client generates `transactionId` before local save, enabling offline creation/id
 ```json
 {
   "username": "rama",
-  "password": "..."
+  "password": "...",
+  "deviceId": "optional-previous-server-device-uuid",
+  "deviceLabel": "POCO F6"
 }
 ```
+
+`deviceId` is omitted on the first login and retained by Android for subsequent
+logins on the same installation. A missing, unknown, or cross-account device ID
+creates a new server device identity; it is never trusted as authorization.
 
 Response:
 
