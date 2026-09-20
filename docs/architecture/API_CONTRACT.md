@@ -204,17 +204,30 @@ No canonical soft-deleted row remains in the monthly table.
 
 ### `GET /workbooks`
 
-List available years and basic metadata.
+Lists the authenticated account's available years with file size and last-modified UTC timestamp.
 
 ### `POST /workbooks/{year}/create`
 
 Generate from approved template if absent.
 
-Must fail rather than overwrite an existing year by default.
+Generation clears template example rows, patches only the known `Rekap` title and
+monthly `DATE(...)` helper formulas, initializes very-hidden application metadata,
+requests full calculation on the next Excel open, validates the result, and then
+promotes it atomically. It fails with `workbook_already_exists` rather than
+overwriting an existing year.
 
 ### `POST /workbooks/import`
 
 Multipart upload.
+
+Form fields:
+
+- `file`: required `.xlsm` upload;
+- `year`: optional confirmation; the server also infers the year from canonical
+  rows, known helper formulas, and `Rekap` text and rejects disagreement;
+- `replaceExisting`: must be `true` to replace an existing year;
+- `confirmNoPendingChanges`: must be `true`; Android sets this only after its
+  local outbox is empty or the user has explicitly resolved pending work.
 
 Required behavior:
 
@@ -227,6 +240,13 @@ Required behavior:
 
 Never replace the active workbook after a failed validation.
 
+Uploads are copied into account-scoped staging with compressed and expanded-size,
+entry-count, path, package-part, VBA, sheet/table/header, Master, year, and row
+validation. Compatible legacy rows receive deterministic transaction IDs and
+revision 1. Existing metadata is reconciled by content hash first and row location
+second. One `SYSTEM_MIGRATION` audit summarizes an import instead of fabricating a
+historical CREATE event for every legacy row.
+
 ### `GET /workbooks/{year}/export`
 
 Downloads actual `.xlsm`.
@@ -234,6 +254,9 @@ Downloads actual `.xlsm`.
 ### `GET /workbooks/export-all`
 
 Returns zip of annual `.xlsm` workbooks.
+
+Exports contain the complete workbook package, including VBA and the application
+audit/index sheets.
 
 ## 7. Device/session management
 

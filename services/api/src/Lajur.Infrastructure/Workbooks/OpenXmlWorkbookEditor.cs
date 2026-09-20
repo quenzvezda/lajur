@@ -238,12 +238,364 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         Save(document, indexPart, auditPart);
     }
 
+    public WorkbookMigrationResult PrepareGeneratedWorkbook(
+        WorkbookKey key,
+        WorkbookAuditContext audit,
+        DateTimeOffset occurredAtUtc)
+    {
+        using var document = SpreadsheetDocument.Open(workbookPath, true);
+        var workbookPart = RequiredWorkbookPart(document);
+
+        PatchKnownYearContent(workbookPart, key.Year);
+        ClearMonthlyTransactions(workbookPart);
+
+        var indexPart = ResetSystemSheet(workbookPart, "__AppIndex", AppIndexHeaders);
+        var auditPart = ResetSystemSheet(workbookPart, "__AuditLog", AuditLogHeaders);
+        AppendMigrationAudit(auditPart, key, audit, occurredAtUtc, "GENERATE", 0, 0, 0);
+        RequestFullCalculation(workbookPart);
+        Save(document, indexPart, auditPart);
+        return new WorkbookMigrationResult(0, 0, 0);
+    }
+
+    public WorkbookMigrationResult MigrateImportedWorkbook(
+        WorkbookKey key,
+        WorkbookAuditContext audit,
+        DateTimeOffset occurredAtUtc)
+    {
+        using var document = SpreadsheetDocument.Open(workbookPath, true);
+        var workbookPart = RequiredWorkbookPart(document);
+        var indexPart = EnsureSystemSheet(workbookPart, "__AppIndex", AppIndexHeaders);
+        var auditPart = EnsureSystemSheet(workbookPart, "__AuditLog", AuditLogHeaders);
+        ValidateSystemSheet(workbookPart, "__AppIndex", AppIndexHeaders);
+        ValidateSystemSheet(workbookPart, "__AuditLog", AuditLogHeaders);
+
+        var allEntries = ReadAllIndexEntries(indexPart);
+        var activeEntries = allEntries.Where(entry => !entry.IsDeleted).ToList();
+        var knownIds = allEntries.Select(entry => entry.TransactionId).ToHashSet();
+        var indexed = 0;
+        var updated = 0;
+
+        foreach (var candidate in ReadMigrationCandidates(workbookPart, key))
+        {
+            var exact = activeEntries.FirstOrDefault(entry =>
+                string.Equals(entry.ContentHash, candidate.ContentHash, StringComparison.Ordinal));
+            var entry = exact ?? activeEntries.FirstOrDefault(entry =>
+                entry.Month == candidate.Month && entry.LastKnownExcelRow == candidate.ExcelRow);
+
+            if (entry is null)
+            {
+                var transactionId = CreateMigrationId(key, candidate, knownIds);
+                knownIds.Add(transactionId);
+                AppendRow(
+                    indexPart,
+                    transactionId.ToString("D"),
+                    key.Year,
+                    candidate.Month,
+                    candidate.ExcelRow,
+                    1,
+                    candidate.ContentHash,
+                    candidate.SnapshotJson,
+                    false,
+                    FormatTimestamp(occurredAtUtc),
+                    FormatTimestamp(occurredAtUtc),
+                    null);
+                indexed++;
+                continue;
+            }
+
+            activeEntries.Remove(entry);
+            var contentChanged = !string.Equals(
+                entry.ContentHash,
+                candidate.ContentHash,
+                StringComparison.Ordinal);
+            UpdateIndexRow(
+                entry,
+                key.Year,
+                candidate.Month,
+                candidate.ExcelRow,
+                contentChanged ? entry.Revision + 1 : entry.Revision,
+                candidate.ContentHash,
+                candidate.SnapshotJson,
+                false,
+                occurredAtUtc,
+                null);
+            if (contentChanged)
+            {
+                updated++;
+            }
+        }
+
+        foreach (var missing in activeEntries)
+        {
+            UpdateIndexRow(
+                missing,
+                missing.Year,
+                missing.Month,
+                missing.LastKnownExcelRow,
+                missing.Revision + 1,
+                missing.ContentHash,
+                missing.SnapshotJson,
+                true,
+                occurredAtUtc,
+                occurredAtUtc);
+        }
+
+        AppendMigrationAudit(
+            auditPart,
+            key,
+            audit,
+            occurredAtUtc,
+            "IMPORT",
+            indexed,
+            updated,
+            activeEntries.Count);
+        RequestFullCalculation(workbookPart);
+        Save(document, indexPart, auditPart);
+        return new WorkbookMigrationResult(indexed, updated, activeEntries.Count);
+    }
+
     public static void ValidateSystemSheets(string path)
     {
         using var document = SpreadsheetDocument.Open(path, false);
         var workbookPart = RequiredWorkbookPart(document);
         ValidateSystemSheet(workbookPart, "__AppIndex", AppIndexHeaders);
         ValidateSystemSheet(workbookPart, "__AuditLog", AuditLogHeaders);
+    }
+
+    private static void PatchKnownYearContent(WorkbookPart workbookPart, int targetYear)
+    {
+        var rekapPart = FindWorksheetPart(workbookPart, "Rekap");
+        var rekapData = RequiredWorksheet(rekapPart).GetFirstChild<SheetData>()
+            ?? throw InvalidWorkbook("Sheet 'Rekap' does not contain sheet data.");
+        var titleRow = rekapData.Elements<Row>().SingleOrDefault(row => row.RowIndex?.Value == 1)
+            ?? throw InvalidWorkbook("Cell 'Rekap!A1' was not found.");
+        var titleCell = FindCell(titleRow, 1)
+            ?? throw InvalidWorkbook("Cell 'Rekap!A1' was not found.");
+        var title = ReadCellText(workbookPart, titleCell) ?? string.Empty;
+        var patchedTitle = YearTextRegex().Replace(title, targetYear.ToString(CultureInfo.InvariantCulture), 1);
+        if (patchedTitle == title && !title.Contains(targetYear.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+        {
+            throw InvalidWorkbook("Cell 'Rekap!A1' does not contain a recognizable workbook year.");
+        }
+
+        SetInlineText(titleCell, patchedTitle);
+        RequiredWorksheet(rekapPart).Save();
+
+        foreach (var (monthNumber, month) in Months)
+        {
+            var worksheetPart = FindWorksheetPart(workbookPart, month.SheetName);
+            var sheetData = RequiredWorksheet(worksheetPart).GetFirstChild<SheetData>()
+                ?? throw InvalidWorkbook($"Sheet '{month.SheetName}' does not contain sheet data.");
+            PatchDateFormula(sheetData, month.SheetName, "AD1", 30, 1, targetYear, monthNumber);
+            PatchDateFormula(sheetData, month.SheetName, "AG2", 33, 2, targetYear, monthNumber);
+            RequiredWorksheet(worksheetPart).Save();
+        }
+    }
+
+    private static void PatchDateFormula(
+        SheetData sheetData,
+        string sheetName,
+        string reference,
+        int column,
+        uint rowNumber,
+        int targetYear,
+        int expectedMonth)
+    {
+        var row = sheetData.Elements<Row>().SingleOrDefault(candidate => candidate.RowIndex?.Value == rowNumber)
+            ?? throw InvalidWorkbook($"Required year helper '{sheetName}!{reference}' was not found.");
+        var cell = FindCell(row, column)
+            ?? throw InvalidWorkbook($"Required year helper '{sheetName}!{reference}' was not found.");
+        var cellFormula = cell.CellFormula
+            ?? throw InvalidWorkbook($"Required year helper '{sheetName}!{reference}' has no formula.");
+        var formula = cellFormula.Text;
+        var match = DateFormulaRegex().Match(formula);
+        if (!match.Success
+            || !int.TryParse(match.Groups[3].Value, CultureInfo.InvariantCulture, out var month)
+            || month != expectedMonth)
+        {
+            throw InvalidWorkbook($"Required year helper '{sheetName}!{reference}' has an unexpected formula.");
+        }
+
+        cellFormula.Text = DateFormulaRegex().Replace(
+            formula,
+            match => $"{match.Groups[1].Value}{targetYear}{match.Groups[2].Value}",
+            1);
+        cell.CellValue = null;
+    }
+
+    private static void ClearMonthlyTransactions(WorkbookPart workbookPart)
+    {
+        foreach (var month in Months.Values)
+        {
+            var worksheetPart = FindWorksheetPart(workbookPart, month.SheetName);
+            var tablePart = worksheetPart.TableDefinitionParts
+                .Single(candidate => candidate.Table?.Name?.Value == month.TableName);
+            var table = RequiredTable(tablePart);
+            var range = ParseRange(table.Reference?.Value, month.TableName);
+            var sheetData = RequiredWorksheet(worksheetPart).GetFirstChild<SheetData>()
+                ?? throw InvalidWorkbook($"Sheet '{month.SheetName}' does not contain sheet data.");
+            var firstDataRow = range.StartRow + 1;
+            _ = GetOrCreateRow(sheetData, firstDataRow);
+
+            foreach (var row in sheetData.Elements<Row>().Where(row =>
+                         row.RowIndex?.Value >= firstDataRow && row.RowIndex?.Value <= range.EndRow))
+            {
+                for (var column = 1; column <= 6; column++)
+                {
+                    ClearCellValue(FindCell(row, column));
+                }
+            }
+
+            SetTableEndRow(table, range, firstDataRow);
+            RequiredWorksheet(worksheetPart).Save();
+            table.Save();
+        }
+    }
+
+    private IEnumerable<MigrationCandidate> ReadMigrationCandidates(
+        WorkbookPart workbookPart,
+        WorkbookKey key)
+    {
+        foreach (var (monthNumber, month) in Months)
+        {
+            var worksheetPart = FindWorksheetPart(workbookPart, month.SheetName);
+            var tablePart = worksheetPart.TableDefinitionParts
+                .Single(candidate => candidate.Table?.Name?.Value == month.TableName);
+            var range = ParseRange(RequiredTable(tablePart).Reference?.Value, month.TableName);
+            var sheetData = RequiredWorksheet(worksheetPart).GetFirstChild<SheetData>()
+                ?? throw InvalidWorkbook($"Sheet '{month.SheetName}' does not contain sheet data.");
+
+            foreach (var row in sheetData.Elements<Row>().Where(row =>
+                         row.RowIndex?.Value > range.StartRow
+                         && row.RowIndex?.Value <= range.EndRow
+                         && !IsTransactionRowBlank(sheetData, row.RowIndex.Value)))
+            {
+                var draft = ReadDraft(workbookPart, row);
+                ValidateDraft(key, draft);
+                if (draft.Date.Month != monthNumber)
+                {
+                    throw InvalidWorkbook(
+                        $"Transaction at '{month.SheetName}!A{row.RowIndex?.Value}' does not belong to month {monthNumber}.");
+                }
+
+                var snapshot = SerializeSnapshot(draft);
+                yield return new MigrationCandidate(
+                    monthNumber,
+                    row.RowIndex!.Value,
+                    snapshot,
+                    HashSnapshot(snapshot));
+            }
+        }
+    }
+
+    private static IReadOnlyList<IndexEntry> ReadAllIndexEntries(WorksheetPart indexPart)
+    {
+        var entries = new List<IndexEntry>();
+        var rows = RequiredWorksheet(indexPart).GetFirstChild<SheetData>()?.Elements<Row>().Skip(1) ?? [];
+        foreach (var row in rows)
+        {
+            var id = ReadInlineCell(FindCell(row, 1));
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                continue;
+            }
+
+            if (!Guid.TryParse(id, out var transactionId))
+            {
+                throw InvalidWorkbook($"System index row {row.RowIndex?.Value} has an invalid transaction ID.");
+            }
+
+            entries.Add(ReadIndexEntry(indexPart, transactionId));
+        }
+
+        if (entries.Select(entry => entry.TransactionId).Distinct().Count() != entries.Count)
+        {
+            throw InvalidWorkbook("System index contains duplicate transaction IDs.");
+        }
+
+        return entries;
+    }
+
+    private static Guid CreateMigrationId(
+        WorkbookKey key,
+        MigrationCandidate candidate,
+        IReadOnlySet<Guid> knownIds)
+    {
+        for (var salt = 0; ; salt++)
+        {
+            var source = $"{key.UserId:D}|{key.Year}|{candidate.Month}|{candidate.ExcelRow}|{candidate.ContentHash}|{salt}";
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(source));
+            bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);
+            bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+            var id = new Guid(bytes.AsSpan(0, 16));
+            if (!knownIds.Contains(id))
+            {
+                return id;
+            }
+        }
+    }
+
+    private static WorksheetPart ResetSystemSheet(
+        WorkbookPart workbookPart,
+        string sheetName,
+        IReadOnlyList<string> headers)
+    {
+        var part = EnsureSystemSheet(workbookPart, sheetName, headers);
+        var sheetData = RequiredWorksheet(part).GetFirstChild<SheetData>()
+            ?? throw InvalidWorkbook($"System sheet '{sheetName}' does not contain sheet data.");
+        sheetData.RemoveAllChildren();
+        AppendRow(part, headers.Cast<object?>().ToArray());
+        return part;
+    }
+
+    private static void AppendMigrationAudit(
+        WorksheetPart auditPart,
+        WorkbookKey key,
+        WorkbookAuditContext audit,
+        DateTimeOffset occurredAtUtc,
+        string mode,
+        int indexed,
+        int updated,
+        int tombstoned)
+    {
+        var summary = JsonSerializer.Serialize(new
+        {
+            mode,
+            indexedTransactionCount = indexed,
+            updatedTransactionCount = updated,
+            tombstonedTransactionCount = tombstoned
+        });
+        AppendRow(
+            auditPart,
+            Guid.NewGuid().ToString("D"),
+            null,
+            "SYSTEM_MIGRATION",
+            FormatSource(audit.Source),
+            FormatTimestamp(occurredAtUtc),
+            null,
+            null,
+            null,
+            summary,
+            key.UserId.ToString("D"),
+            audit.DeviceId,
+            audit.CorrelationId);
+    }
+
+    private static void RequestFullCalculation(WorkbookPart workbookPart)
+    {
+        var workbook = RequiredWorkbook(workbookPart);
+        var properties = workbook.CalculationProperties ?? workbook.AppendChild(new CalculationProperties());
+        properties.CalculationMode = CalculateModeValues.Auto;
+        properties.ForceFullCalculation = true;
+        properties.FullCalculationOnLoad = true;
+    }
+
+    private static void SetInlineText(Cell cell, string value)
+    {
+        cell.CellFormula = null;
+        cell.CellValue = null;
+        cell.DataType = CellValues.InlineString;
+        cell.InlineString = new InlineString(new Text(value));
     }
 
     private void ValidateDraft(WorkbookKey key, WorkbookTransactionDraft draft)
@@ -401,6 +753,7 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
             return;
         }
 
+        cell.CellFormula = null;
         cell.CellValue = null;
         cell.InlineString = null;
         cell.DataType = null;
@@ -931,6 +1284,12 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
     [GeneratedRegex("^\\$?([A-Z]+)\\$?([0-9]+):\\$?([A-Z]+)\\$?([0-9]+)$", RegexOptions.CultureInvariant)]
     private static partial Regex TableRangeRegex();
 
+    [GeneratedRegex("\\b(?:19|20)[0-9]{2}\\b", RegexOptions.CultureInvariant)]
+    private static partial Regex YearTextRegex();
+
+    [GeneratedRegex("(?i)(DATE\\(\\s*)[0-9]{4}(\\s*,\\s*([0-9]{1,2})\\s*,)", RegexOptions.CultureInvariant)]
+    private static partial Regex DateFormulaRegex();
+
     private sealed record MonthDefinition(string SheetName, string TableName);
 
     private sealed record TableRange(string StartColumn, uint StartRow, string EndColumn, uint EndRow);
@@ -960,4 +1319,10 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         string Category,
         long AmountIdr,
         string? Description);
+
+    private sealed record MigrationCandidate(
+        int Month,
+        uint ExcelRow,
+        string SnapshotJson,
+        string ContentHash);
 }

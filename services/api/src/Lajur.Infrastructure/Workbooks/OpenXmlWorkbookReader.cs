@@ -254,6 +254,63 @@ public sealed partial class OpenXmlWorkbookReader
             definedNames);
     }
 
+    public int DetectWorkbookYear(string workbookPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workbookPath);
+        var candidates = new HashSet<int>();
+
+        for (var month = 1; month <= 12; month++)
+        {
+            foreach (var transaction in ReadMonthlyTransactions(workbookPath, month))
+            {
+                candidates.Add(transaction.Date.Year);
+            }
+        }
+
+        using var document = SpreadsheetDocument.Open(workbookPath, false);
+        var workbookPart = document.WorkbookPart
+            ?? throw InvalidWorkbook("The package does not contain a workbook part.");
+
+        foreach (var month in Months.Values)
+        {
+            var sheet = workbookPart.Workbook?.Sheets?.Elements<Sheet>()
+                .Single(candidate => candidate.Name?.Value == month.SheetName);
+            var worksheetPart = (WorksheetPart)workbookPart.GetPartById(sheet!.Id!.Value!);
+            foreach (var reference in new[] { "AD1", "AG2" })
+            {
+                var cell = worksheetPart.Worksheet?.Descendants<Cell>()
+                    .SingleOrDefault(candidate => candidate.CellReference?.Value == reference)
+                    ?? throw InvalidWorkbook($"Required year helper '{month.SheetName}!{reference}' was not found.");
+                var match = DateYearRegex().Match(cell.CellFormula?.Text ?? string.Empty);
+                if (!match.Success
+                    || !int.TryParse(match.Groups[1].Value, CultureInfo.InvariantCulture, out var year))
+                {
+                    throw InvalidWorkbook($"Required year helper '{month.SheetName}!{reference}' has an unexpected formula.");
+                }
+
+                candidates.Add(year);
+            }
+        }
+
+        var rekapSheet = workbookPart.Workbook?.Sheets?.Elements<Sheet>()
+            .Single(candidate => candidate.Name?.Value == "Rekap");
+        var rekapPart = (WorksheetPart)workbookPart.GetPartById(rekapSheet!.Id!.Value!);
+        var titleCell = rekapPart.Worksheet?.Descendants<Cell>()
+            .SingleOrDefault(candidate => candidate.CellReference?.Value == "A1")
+            ?? throw InvalidWorkbook("Cell 'Rekap!A1' was not found.");
+        var titleMatch = YearTextRegex().Match(ReadCellText(workbookPart, titleCell) ?? string.Empty);
+        if (!titleMatch.Success
+            || !int.TryParse(titleMatch.Value, CultureInfo.InvariantCulture, out var titleYear))
+        {
+            throw InvalidWorkbook("Cell 'Rekap!A1' does not contain a recognizable workbook year.");
+        }
+
+        candidates.Add(titleYear);
+        return candidates.Count == 1
+            ? candidates.Single()
+            : throw InvalidWorkbook("Workbook content contains conflicting years.");
+    }
+
     private static IReadOnlyList<WorkbookTransaction> ReadIndexedTransactions(string workbookPath)
     {
         using var document = SpreadsheetDocument.Open(workbookPath, false);
@@ -500,6 +557,12 @@ public sealed partial class OpenXmlWorkbookReader
 
     [GeneratedRegex("^\\$?([A-Z]+)\\$?([0-9]+):\\$?([A-Z]+)\\$?([0-9]+)$", RegexOptions.CultureInvariant)]
     private static partial Regex TableRangeRegex();
+
+    [GeneratedRegex("(?i)DATE\\(\\s*([0-9]{4})\\s*,", RegexOptions.CultureInvariant)]
+    private static partial Regex DateYearRegex();
+
+    [GeneratedRegex("\\b(?:19|20)[0-9]{2}\\b", RegexOptions.CultureInvariant)]
+    private static partial Regex YearTextRegex();
 
     private sealed record MonthDefinition(string SheetName, string TableName);
 

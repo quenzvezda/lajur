@@ -55,6 +55,21 @@ public sealed class FinanceExceptionHandler(
             "Transaction revision conflict",
             "transaction_revision_conflict",
             "The transaction has changed since the supplied revision."),
+        WorkbookAlreadyExistsException => new(
+            StatusCodes.Status409Conflict,
+            "Workbook already exists",
+            "workbook_already_exists",
+            "A workbook already exists for the requested year."),
+        WorkbookReplacementNotConfirmedException => new(
+            StatusCodes.Status409Conflict,
+            "Workbook replacement not confirmed",
+            "workbook_replace_not_confirmed",
+            "Explicit replacement confirmation is required for an existing year."),
+        WorkbookPendingChangesNotConfirmedException => new(
+            StatusCodes.Status409Conflict,
+            "Pending changes not confirmed",
+            "pending_changes_confirmation_required",
+            "Confirm that the client has no unsynchronized local changes before importing."),
         WorkbookTransactionNotFoundException => new(
             StatusCodes.Status404NotFound,
             "Transaction not found",
@@ -65,6 +80,21 @@ public sealed class FinanceExceptionHandler(
             "Workbook not found",
             "workbook_not_found",
             "No active workbook exists for the requested year."),
+        WorkbookUploadTooLargeException => new(
+            StatusCodes.Status413PayloadTooLarge,
+            "Workbook upload too large",
+            "workbook_upload_too_large",
+            "The uploaded workbook exceeds the configured size limit."),
+        WorkbookImportValidationException => new(
+            StatusCodes.Status422UnprocessableEntity,
+            "Workbook import validation failed",
+            "workbook_import_invalid",
+            exception.Message),
+        WorkbookTemplateUnavailableException => new(
+            StatusCodes.Status503ServiceUnavailable,
+            "Workbook template unavailable",
+            "workbook_template_unavailable",
+            "The approved workbook template is not installed on the server."),
         InvalidDataException => new(
             StatusCodes.Status422UnprocessableEntity,
             "Workbook validation failed",

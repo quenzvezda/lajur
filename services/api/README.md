@@ -65,7 +65,7 @@ Implemented endpoints under `/api/v1`:
 - `POST /auth/login` — username/password plus an optional prior `deviceId` and device label;
 - `POST /auth/refresh` — opaque rotating refresh token;
 - `POST /auth/logout` — revoke the authenticated session family;
-- `GET /me` — current account/device/session;
+- `GET /me` — current account/device/session plus workbook onboarding state and available years;
 - `DELETE /devices/{deviceId}` — revoke a device owned by the authenticated account.
 
 Defaults are a 15-minute access token, 30-day refresh idle timeout, and 180-day
@@ -92,13 +92,34 @@ rows rather than Excel formula caches. Stable ProblemDetails codes distinguish
 missing workbooks/transactions, ID conflicts, revision conflicts, request
 validation, and workbook validation failures.
 
-Workbook provisioning and migration remain Phase 4 responsibilities. Before
-migration, transaction listing exposes only rows represented in `__AppIndex`,
-while summary calculation includes every valid visible transaction row.
+Legacy rows become visible to transaction listing after Phase 4 import migration
+assigns their application identities. Summary calculation always includes every
+valid visible transaction row.
+
+## Workbook onboarding, import, and export
+
+Authenticated Phase 4 endpoints are available under `/api/v1`:
+
+- `GET /workbooks`;
+- `POST /workbooks/{year}/create`;
+- `POST /workbooks/import` (multipart);
+- `GET /workbooks/{year}/export`;
+- `GET /workbooks/export-all`.
+
+Install the approved clean template at
+`.local/lajur/templates/finance-template.xlsm` when running directly. The Docker
+Compose templates volume maps the same logical location to
+`/srv/lajur/templates/finance-template.xlsm` in the container.
+
+Imports require `confirmNoPendingChanges=true`. Replacing an existing year also
+requires `replaceExisting=true`; a protected byte-for-byte backup is written before
+promotion. Uploads are staged, size/package checked, structurally validated,
+migrated, validated again, and promoted atomically. A failure leaves the active
+workbook unchanged.
 
 ## Workbook module status
 
-The Phase 1 workbook spike is implemented under `src/Lajur.Infrastructure/Workbooks`.
+The workbook adapter is implemented under `src/Lajur.Infrastructure/Workbooks`.
 It uses `DocumentFormat.OpenXml` without Excel COM/Interop and provides:
 
 - read-only monthly A:F transaction and Master-data parsing;
@@ -107,8 +128,11 @@ It uses `DocumentFormat.OpenXml` without Excel COM/Interop and provides:
 - very-hidden append-only `__AuditLog` history;
 - per-user/year in-process serialization;
 - same-filesystem temporary-copy validation and atomic promotion.
+- known-node year generation from an approved clean template;
+- staged legacy import and metadata reconciliation;
+- protected pre-import backups and full-package export.
 
 Workbook tests use the synthetic XLSM fixture copied into the test output. Ordinary
-mutations preserve VBA bytes and unrelated package parts. Existing legacy rows are
-not assigned application transaction IDs by the spike; that migration belongs to
-the import/onboarding phase.
+mutations preserve VBA bytes and unrelated package parts. Lifecycle tests cover
+clean year generation, legacy indexing, invalid-import rollback, and protected
+replacement backups.

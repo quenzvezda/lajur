@@ -43,6 +43,20 @@ dotnet run --project src/Lajur.Api -- account create --username rama
 The command prompts for a password without echoing it. Local auth data and the
 generated JWT signing key live below the ignored `.local/lajur/` directory.
 
+Install the approved clean workbook template before using the Create New Workbook
+endpoint:
+
+```powershell
+New-Item -ItemType Directory -Force .local/lajur/templates
+Copy-Item private/output/Keuangan_Pribadi_Template_2026.xlsm `
+  .local/lajur/templates/finance-template.xlsm
+```
+
+Both paths are intentionally ignored by Git because the approved local template
+may originate from a private workbook. Automated tests use only the committed
+sanitized fixture. Do not substitute the owner's sole original workbook; always
+keep that original outside the runtime directory.
+
 ### Android
 
 Install the latest stable Android Studio and let its Setup Wizard install:

@@ -48,6 +48,21 @@ public sealed record DeleteWorkbookTransactionCommand(
     int ExpectedRevision,
     WorkbookAuditContext Audit);
 
+public sealed record WorkbookMigrationResult(
+    int IndexedTransactionCount,
+    int UpdatedTransactionCount,
+    int TombstonedTransactionCount);
+
+public sealed record StoredWorkbookInfo(
+    int Year,
+    long SizeBytes,
+    DateTimeOffset LastModifiedAtUtc);
+
+public sealed record StoredWorkbookImportResult(
+    WorkbookMigrationResult Migration,
+    bool ReplacedExisting,
+    string? BackupFileName);
+
 public class WorkbookConflictException(string message) : Exception(message);
 
 public sealed class WorkbookTransactionIdConflictException(string message)
@@ -58,3 +73,20 @@ public sealed class WorkbookRevisionConflictException(string message)
 
 public sealed class WorkbookTransactionNotFoundException(Guid transactionId)
     : Exception($"Transaction '{transactionId:D}' was not found in the workbook.");
+
+public sealed class WorkbookAlreadyExistsException(int year)
+    : WorkbookConflictException($"A workbook already exists for year {year}.");
+
+public sealed class WorkbookReplacementNotConfirmedException(int year)
+    : WorkbookConflictException($"Replacing the workbook for year {year} was not confirmed.");
+
+public sealed class WorkbookPendingChangesNotConfirmedException()
+    : WorkbookConflictException("The client did not confirm that no local changes are pending.");
+
+public sealed class WorkbookTemplateUnavailableException(string message) : Exception(message);
+
+public sealed class WorkbookUploadTooLargeException(long maximumBytes)
+    : Exception($"The workbook upload exceeds the {maximumBytes} byte limit.");
+
+public sealed class WorkbookImportValidationException(string message, Exception? innerException = null)
+    : Exception(message, innerException);

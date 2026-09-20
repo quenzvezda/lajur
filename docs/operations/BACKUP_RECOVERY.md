@@ -53,6 +53,12 @@ Always create a protected backup before:
 
 Retain protected backups for **90 days** initially.
 
+The Phase 4 import path writes protected backups beneath
+`backups/<immutable-user-id>/<year>/` immediately before a validated replacement
+is promoted. Filenames contain a UTC timestamp, the `pre-import` purpose, and a
+random suffix. Retention pruning and an operator restore command remain later
+operational work; the import path does not delete protected backups.
+
 The exact storage policy can be tuned after observing file size/change frequency.
 
 ## 4. Restore
