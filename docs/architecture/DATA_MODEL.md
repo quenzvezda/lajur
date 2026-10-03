@@ -10,7 +10,7 @@ Transaction
 - revision      : integer     # system revision, hidden metadata
 - date          : local date
 - type          : string      # constrained by Master
-- paymentMethod : string      # constrained by Master
+- paymentMethod : string      # optional; empty string or a Master value
 - category      : string      # constrained by Master
 - amountIdr     : integer     # positive whole rupiah amount
 - description   : string?     # optional
@@ -21,6 +21,14 @@ Important:
 - `transactionId` and `revision` are not added to the visible `A:F` monthly table.
 - `amountIdr` must not use binary floating point.
 - transaction local date determines target year/month.
+
+Only payment and description are optional. Blank payment is stored as `""` and
+a blank Excel C cell, without a placeholder Master entry or settlement status.
+The owner may record an advanced expense now and fill payment on that same
+transaction later. This is an UPDATE, not another expense; monthly totals count
+the original positive amount regardless of payment. Date, type, category and
+positive whole-IDR amount remain required. Nonblank payment must match Master.
+Existing non-null Room/DTO fields remain compatible; no local schema migration.
 
 ## 2. Excel visible row mapping
 

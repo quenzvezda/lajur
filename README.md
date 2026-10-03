@@ -86,6 +86,20 @@ docker compose down
 See [`docs/development/LOCAL_SETUP.md`](docs/development/LOCAL_SETUP.md) for SDK,
 Android emulator/device, Docker, and local-only file guidance.
 
+## Data / Workbook
+
+Payment method is optional; date, type, category and positive integer IDR remain
+required. Home offers a non-blocking **Perlu dilengkapi** reminder/filter for the
+cached month. Filling payment later updates the original transaction, without a
+new settlement status or duplicate expense. See
+[the UX smoke checklist](docs/development/SMART_SCAN_UX_SMOKE.md#optional-payment-acceptance).
+
+The Android **Pengaturan → Data / Workbook** menu now supports annual workbook
+creation, confirmed XLSM import, annual export and all-years ZIP export. Import
+blocks outstanding local operations and never merges or silently replaces a year.
+See [the workbook menu smoke guide](docs/development/WORKBOOK_MENU_SMOKE.md) before
+testing replacement on a daily-use account.
+
 ## Core technology direction
 
 | Area | Direction |

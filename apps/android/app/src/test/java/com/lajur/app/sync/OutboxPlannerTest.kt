@@ -17,6 +17,17 @@ class OutboxPlannerTest {
     )
     private val edited = initial.copy(amountIdr = 30_000, description = "Makan siang")
 
+    @Test fun `payment filled offline updates original operation without another expense`() {
+        val blank = initial.copy(paymentMethod = "")
+        val filled = blank.copy(paymentMethod = "Bank")
+        assertEquals(CompactionResult.Keep(PendingOperation(OutboxOperationType.CREATE, null, filled)),
+            OutboxPlanner.plan(PendingOperation(OutboxOperationType.CREATE, null, blank), OutboxOperationType.UPDATE, null, filled))
+        assertEquals(CompactionResult.Keep(PendingOperation(OutboxOperationType.UPDATE, 3, filled)),
+            OutboxPlanner.plan(null, OutboxOperationType.UPDATE, 3, filled))
+        assertEquals(CompactionResult.Keep(PendingOperation(OutboxOperationType.UPDATE, 3, blank)),
+            OutboxPlanner.plan(PendingOperation(OutboxOperationType.UPDATE, 3, filled), OutboxOperationType.UPDATE, 4, blank))
+    }
+
     @Test
     fun `new transaction edited offline remains one create with latest payload`() {
         val existing = PendingOperation(OutboxOperationType.CREATE, null, initial)

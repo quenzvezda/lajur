@@ -68,6 +68,12 @@ E Jumlah (Rp)
 F Keterangan
 ```
 
+Column C is optional on an otherwise valid transaction row. Readers, metadata
+snapshots and imports represent its blank value as an empty string; writes keep
+the existing cell style and blank content. No synthetic payment method, extra
+status column or separate repayment row is introduced. A/B/D/E remain required.
+Filling C later is an ordinary revisioned edit to the same transaction.
+
 ## 5. Do not add transaction system columns to A:F table
 
 Earlier design discussion considered `TransactionId`, `Revision`, and timestamp columns adjacent to the transaction table.

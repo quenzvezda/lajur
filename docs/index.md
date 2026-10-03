@@ -26,6 +26,10 @@
 - [Phase 5/6 emulator smoke test](development/EMULATOR_PHASE5_6_SMOKE.md)
 - [Phase 7 Smart Scan smoke test](development/PHASE7_SMART_SCAN_SMOKE.md)
 - [Phase 8 local-model development](development/PHASE8_LOCAL_MODEL.md)
+- [Smart Scan and editor UX smoke test](development/SMART_SCAN_UX_SMOKE.md)
+- [Data/Workbook menu smoke test](development/WORKBOOK_MENU_SMOKE.md)
+- [Local extraction model candidates](reference/LOCAL_MODEL_CANDIDATES.md)
+- [Evidence-first Smart Scan decision](adr/0007-evidence-first-smart-scan.md)
 - [Known issues](development/KNOWN_ISSUES.md)
 
 ## Operations
@@ -52,7 +56,9 @@
 
 - [Observed workbook structure](reference/WORKBOOK_OBSERVED_STRUCTURE.md)
 - [Monthly workbook normalization](reference/WORKBOOK_TEMPLATE_NORMALIZATION.md)
+- [Updated workbook audit, 2026-10-03](reference/WORKBOOK_SOURCE_AUDIT_2026_10_03.md)
 - [Glossary](reference/GLOSSARY.md)
 - [Open questions](reference/OPEN_QUESTIONS.md)
 - [Research notes](reference/RESEARCH_NOTES.md)
+- [Agent access to VPS and deployment research](reference/VPS_AGENT_DEPLOYMENT_RESEARCH.md)
 - [OCR baseline](reference/OCR_BASELINE.md)

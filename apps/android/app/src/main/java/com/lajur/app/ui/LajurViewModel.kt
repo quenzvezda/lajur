@@ -18,15 +18,15 @@ import com.lajur.app.security.AppLockStatus
 import com.lajur.app.scan.ScanImageRequest
 import com.lajur.app.scan.ScanImageSource
 import com.lajur.app.scan.SmartScanState
-import com.lajur.app.scan.extraction.TransactionExtraction
-import com.lajur.app.scan.extraction.ExtractionRunResult
-import com.lajur.app.scan.extraction.ValidatedTransactionExtraction
+import com.lajur.app.scan.ScanReviewSession
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -44,11 +44,14 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     val pendingSharedImage: StateFlow<String?> = mutablePendingSharedImage.asStateFlow()
     private val mutableSmartScanState = MutableStateFlow<SmartScanState>(SmartScanState.Idle)
     val smartScanState: StateFlow<SmartScanState> = mutableSmartScanState.asStateFlow()
-    private val mutableExtractionReview = MutableStateFlow<ValidatedTransactionExtraction?>(null)
-    val extractionReview: StateFlow<ValidatedTransactionExtraction?> = mutableExtractionReview.asStateFlow()
-    private val mutableExtractionStatus = MutableStateFlow<String?>(null)
-    val extractionStatus: StateFlow<String?> = mutableExtractionStatus.asStateFlow()
-    private var rawExtraction: TransactionExtraction? = null
+    private val scanReviewSession = ScanReviewSession(
+        container.transactionExtractionEngine, container.extractionValidator, viewModelScope,
+    )
+    val scanReview = scanReviewSession.state
+    private val mutableScanDiagnosticStatus = MutableStateFlow<String?>(null)
+    val scanDiagnosticStatus: StateFlow<String?> = mutableScanDiagnosticStatus.asStateFlow()
+    private val mutableScanReportSaving = MutableStateFlow(false)
+    val scanReportSaving: StateFlow<Boolean> = mutableScanReportSaving.asStateFlow()
     private var smartScanJob: Job? = null
     private val mutableMonth = MutableStateFlow(YearMonth.now())
     val month: StateFlow<YearMonth> = mutableMonth.asStateFlow()
@@ -58,9 +61,100 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     val busy: StateFlow<Boolean> = mutableBusy.asStateFlow()
     private val mutableMessage = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = mutableMessage.asStateFlow()
+    private val mutableWorkbookMenu = MutableStateFlow(WorkbookMenuState())
+    val workbookMenu = mutableWorkbookMenu.asStateFlow()
+    val workbookOutboxCount = container.workbookRepository.outboxCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    private var pendingExportYear: Int? = null
+    private var pendingExportOwner: String? = null
+    private var workbookOwner: String? = null
 
-    val transactions = combine(mutableMonth, mutableQuery) { month, query -> month to query }
-        .flatMapLatest { (month, query) -> container.financeRepository.observeTransactions(month, query) }
+    fun prepareWorkbookExport(year: Int?) {
+        pendingExportYear = year
+        pendingExportOwner = (session.value as? SessionState.SignedIn)?.session?.userId
+    }
+
+    fun completeWorkbookExport(destination: String?) {
+        val year = pendingExportYear
+        val sameOwner = pendingExportOwner != null && pendingExportOwner == (session.value as? SessionState.SignedIn)?.session?.userId
+        pendingExportOwner = null
+        pendingExportYear = null
+        if (destination != null && sameOwner) exportWorkbook(year, destination)
+    }
+
+    fun loadWorkbooks() = workbookAction {
+        mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(workbooks = container.workbookRepository.list())
+    }
+
+    fun selectWorkbook(uri: String) = workbookAction {
+        val selected = container.workbookRepository.select(uri)
+        mutableWorkbookMenu.value.selected?.file?.delete()
+        mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(selected = selected)
+    }
+
+    fun discardSelectedWorkbook() {
+        if (mutableWorkbookMenu.value.busy) return
+        mutableWorkbookMenu.value.selected?.file?.delete()
+        mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(selected = null)
+    }
+
+    fun exportWorkbook(year: Int?, destination: String) = workbookAction {
+        container.workbookRepository.export(year, destination)
+        mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(
+            status = "Ekspor tersimpan. File hanya memuat data server; perubahan lokal pending tidak termasuk.",
+        )
+    }
+
+    fun createDataWorkbook(year: Int) = workbookAction {
+        container.sessionRepository.createCurrentYearWorkbook(year).getOrThrow()
+        mutableMonth.value = YearMonth.of(year, mutableMonth.value.monthValue)
+        mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(
+            workbooks = container.workbookRepository.list(), status = "Workbook $year dibuat dari template server.",
+        )
+    }
+
+    fun importWorkbook(year: Int, replace: Boolean) = workbookAction {
+        val selected = requireNotNull(mutableWorkbookMenu.value.selected) { "Pilih workbook terlebih dahulu." }
+        try {
+            val result = container.workbookRepository.import(selected, year, replace)
+            mutableMonth.value = YearMonth.of(result.year, mutableMonth.value.monthValue)
+            selected.file.delete()
+            mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(
+                selected = null,
+                status = "Impor ${result.year} berhasil: ${result.indexedTransactionCount} transaksi aktif, " +
+                    "${result.updatedTransactionCount} diperbarui, ${result.tombstonedTransactionCount} dihapus." +
+                    if (result.replacedExisting) " Backup sebelum penggantian tersimpan di server." else "",
+            )
+            mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(workbooks = container.workbookRepository.list())
+        } finally {
+            // Also reload after uncertain network failures. The server may have committed.
+            runCatching { container.sessionRepository.reloadWorkbookState() }
+            container.financeRepository.refreshMonth(mutableMonth.value)
+        }
+    }
+
+    private fun workbookAction(action: suspend () -> Unit) {
+        if (mutableWorkbookMenu.value.busy) return
+        mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(busy = true, error = null, status = null)
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(
+                    error = (error.message ?: "Operasi workbook gagal.") +
+                        " Jika koneksi putus saat impor, refresh dan periksa data server sebelum mencoba lagi.",
+                )
+            } finally {
+                mutableWorkbookMenu.value = mutableWorkbookMenu.value.copy(busy = false)
+            }
+        }
+    }
+
+    // Home filters this complete month snapshot; reminders must not disappear during text search.
+    val transactions = mutableMonth
+        .flatMapLatest { month -> container.financeRepository.observeTransactions(month, "") }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val summary = mutableMonth.flatMapLatest(container.financeRepository::observeSummary)
@@ -90,6 +184,11 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch { container.sessionRepository.restore() }
         viewModelScope.launch {
             session.collect { state ->
+                if (state is SessionState.SignedIn && workbookOwner != state.session.userId) {
+                    mutableWorkbookMenu.value.selected?.file?.delete()
+                    mutableWorkbookMenu.value = WorkbookMenuState()
+                    workbookOwner = state.session.userId
+                }
                 if (state is SessionState.SignedIn && !state.needsWorkbookOnboarding) {
                     container.scheduler.enqueue()
                     refresh()
@@ -98,14 +197,16 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         }
         viewModelScope.launch {
             master.collect { currentMaster ->
-                rawExtraction?.let { extraction ->
-                    mutableExtractionReview.value = container.extractionValidator.validate(extraction, currentMaster)
-                }
+                scanReviewSession.revalidate(currentMaster)
             }
         }
     }
 
     fun login(serverUrl: String, username: String, password: String) {
+        if (mutableWorkbookMenu.value.busy) {
+            mutableMessage.value = "Tunggu operasi workbook selesai sebelum login kembali."
+            return
+        }
         launchBusy {
             container.sessionRepository.login(serverUrl, username, password)
                 .onFailure { mutableMessage.value = it.message ?: "Login gagal." }
@@ -167,6 +268,10 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun signOut() {
+        if (mutableWorkbookMenu.value.busy) return
+        discardSelectedWorkbook()
+        mutableWorkbookMenu.value = WorkbookMenuState()
+        pendingExportOwner = null
         viewModelScope.launch { container.sessionRepository.signOut() }
     }
 
@@ -221,9 +326,8 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         smartScanJob?.cancel()
         val request = ScanImageRequest(uri, source)
         mutableSmartScanState.value = SmartScanState.Ready(request)
-        rawExtraction = null
-        mutableExtractionReview.value = null
-        mutableExtractionStatus.value = null
+        scanReviewSession.clear()
+        mutableScanDiagnosticStatus.value = null
         mutablePendingSharedImage.value = if (source == ScanImageSource.SHARE) uri else null
     }
 
@@ -237,61 +341,58 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         mutablePendingSharedImage.value = null
         mutableSmartScanState.value = SmartScanState.Processing(request)
         smartScanJob = viewModelScope.launch {
-            container.transactionExtractionEngine.begin().use { extractionRequest ->
-                runCatching { container.smartScanPipeline.process(request) }
-                    .onSuccess { output ->
-                        if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request == request) {
-                            val completeState = SmartScanState.Complete(output)
-                            mutableSmartScanState.value = completeState
-                            releaseTemporaryCapture(request)
-                            val result = extractionRequest.extract(output.ocr.text, master.value)
-                            if (mutableSmartScanState.value != completeState) return@onSuccess
-                            val extraction = when (result) {
-                                is ExtractionRunResult.Completed -> {
-                                    mutableExtractionStatus.value = if (result.coldStart) {
-                                        "Model dimuat ${result.modelLoadMillis} ms · " +
-                                            "ekstraksi ${result.inferenceMillis} ms"
-                                    } else {
-                                        "Model siap · ekstraksi ${result.inferenceMillis} ms"
-                                    }
-                                    result.review.extraction
-                                }
-                                is ExtractionRunResult.Unavailable -> {
-                                    mutableExtractionStatus.value = result.message
-                                    TransactionExtraction.empty()
-                                }
-                                is ExtractionRunResult.Failed -> {
-                                    mutableExtractionStatus.value = "Ekstraksi otomatis gagal: ${result.message}"
-                                    TransactionExtraction.empty()
-                                }
-                            }
-                            rawExtraction = extraction
-                            mutableExtractionReview.value = when (result) {
-                                is ExtractionRunResult.Completed -> result.review
-                                else -> container.extractionValidator.validate(extraction, master.value)
-                            }
-                        }
-                    }
-                    .onFailure { error ->
-                        if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request == request) {
-                            mutableSmartScanState.value = SmartScanState.Failed(
-                                request,
-                                error.message ?: "OCR tidak dapat memproses gambar.",
-                            )
-                        }
-                    }
+            try {
+                val output = container.smartScanPipeline.process(request)
+                currentCoroutineContext().ensureActive()
+                if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request != request) return@launch
+                scanReviewSession.show(output, master.value)
+                mutableSmartScanState.value = SmartScanState.Complete(output)
+                releaseTemporaryCapture(request)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if ((mutableSmartScanState.value as? SmartScanState.Processing)?.request == request) {
+                    mutableSmartScanState.value = SmartScanState.Failed(
+                        request, error.message ?: "OCR tidak dapat memproses gambar.",
+                    )
+                }
             }
         }
     }
+
+    fun requestScanSuggestions() {
+        if (mutableScanReportSaving.value) return
+        mutableScanDiagnosticStatus.value = null
+        scanReviewSession.requestSuggestions()
+    }
+
+    fun cancelScanSuggestions() {
+        scanReviewSession.cancelSuggestions()
+    }
+
 
     fun discardScan() {
         smartScanJob?.cancel()
         releaseTemporaryCapture(currentScanRequest())
         mutablePendingSharedImage.value = null
         mutableSmartScanState.value = SmartScanState.Idle
-        rawExtraction = null
-        mutableExtractionReview.value = null
-        mutableExtractionStatus.value = null
+        scanReviewSession.clear()
+        mutableScanDiagnosticStatus.value = null
+    }
+
+    fun saveScanDiagnostic() {
+        if (!BuildConfig.DEBUG || mutableScanReportSaving.value) return
+        val snapshot = scanReview.value ?: return
+        if (snapshot.suggestions == com.lajur.app.scan.ScanSuggestionState.RUNNING) return
+        mutableScanReportSaving.value = true
+        viewModelScope.launch {
+            val message = runCatching { container.debugScanDiagnosticsStore.save(snapshot.output, snapshot.result, snapshot.review) }
+                .fold({ "Laporan uji tersimpan. Bisa diambil lewat ADB." }, { "Laporan gagal disimpan: ${it.message}" })
+            mutableScanReportSaving.value = false
+            if (scanReview.value?.output == snapshot.output) {
+                mutableScanDiagnosticStatus.value = message
+            }
+        }
     }
 
     fun clearMessage() {
@@ -307,6 +408,11 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
                 mutableBusy.value = false
             }
         }
+    }
+
+    override fun onCleared() {
+        mutableWorkbookMenu.value.selected?.file?.delete()
+        super.onCleared()
     }
 
     private fun updateAppLockSettings(transform: (AppLockSettings) -> AppLockSettings) {

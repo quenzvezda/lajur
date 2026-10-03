@@ -60,6 +60,18 @@ interface LajurDao {
     @Query("SELECT * FROM outbox ORDER BY createdAtEpochMillis, id LIMIT 1")
     suspend fun getNextOutbox(): OutboxEntity?
 
+    @Query("SELECT COUNT(*) FROM outbox")
+    suspend fun getOutboxCount(): Int
+
+    @Query("SELECT COUNT(*) FROM outbox")
+    fun observeOutboxCount(): Flow<Int>
+
+    @Query("DELETE FROM transactions WHERE substr(date, 1, 4) = :year AND syncState = 'SYNCED'")
+    suspend fun clearSyncedYear(year: String)
+
+    @Query("DELETE FROM master_cache WHERE year = :year")
+    suspend fun clearMasterYear(year: Int)
+
     @Query("DELETE FROM outbox WHERE transactionId = :transactionId")
     suspend fun deleteOutbox(transactionId: String)
 

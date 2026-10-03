@@ -41,8 +41,12 @@ Three categories:
 
 | Setting | Default |
 |---|---|
-| Smart Scan | ON if model available |
+| Smart Scan | Local OCR available without a model |
+| Local AI suggestions | Explicit optional action on each scan draft |
 | Keep original receipt image | OFF |
+
+The AI action is not a new persisted setting. It starts model loading only when
+requested; installing a model does not make scans run AI automatically.
 
 ### Appearance
 
@@ -58,6 +62,14 @@ Actions:
 - Export Workbook
 - Export All
 - Sync Now
+
+Implemented at **Pengaturan → Data / Workbook**, with an available-years list,
+file size/last-modified timestamp and a count of all outstanding outbox operations.
+The menu also creates absent years from the server template. Imports are explicit
+year-confirmed replacements (not merges), blocked by any pending/failed outbox,
+and require a separate confirmation. Choosing a file does not upload it.
+Exports use the system Save As picker and include only canonical server data;
+unsynchronized local changes trigger a warning. Import's Android limit is 20 MiB.
 
 ## 2. Advanced candidates
 

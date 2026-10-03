@@ -23,11 +23,19 @@ enum class DocumentKind {
 }
 
 @Serializable
+enum class ExtractionSource {
+    @SerialName("unknown") UNKNOWN,
+    @SerialName("ocr_rules") OCR_RULES,
+    @SerialName("local_model") LOCAL_MODEL,
+}
+
+@Serializable
 data class ExtractedField<T>(
     val value: T? = null,
     val alternatives: List<T> = emptyList(),
     val confidence: ExtractionConfidence = ExtractionConfidence.MISSING,
     val evidence: String? = null,
+    val source: ExtractionSource = ExtractionSource.UNKNOWN,
 )
 
 @Serializable
@@ -48,6 +56,7 @@ data class TransactionExtraction(
     }
 }
 
+@Serializable
 enum class ExtractionFieldName {
     SCHEMA,
     MASTER_DATA,
@@ -60,8 +69,10 @@ enum class ExtractionFieldName {
     DESCRIPTION,
 }
 
+@Serializable
 enum class ExtractionIssueSeverity { WARNING, BLOCKING }
 
+@Serializable
 data class ExtractionIssue(
     val field: ExtractionFieldName,
     val code: String,
@@ -69,6 +80,7 @@ data class ExtractionIssue(
     val severity: ExtractionIssueSeverity,
 )
 
+@Serializable
 data class ValidatedTransactionExtraction(
     val extraction: TransactionExtraction,
     val issues: List<ExtractionIssue>,
@@ -78,7 +90,6 @@ data class ValidatedTransactionExtraction(
             extraction.date.value != null &&
             extraction.amountIdr.value != null &&
             extraction.transactionType.value != null &&
-            extraction.paymentMethod.value != null &&
             extraction.category.value != null
 
     fun toTransactionDraftOrNull(): TransactionDraft? {
@@ -86,11 +97,10 @@ data class ValidatedTransactionExtraction(
         return TransactionDraft(
             date = requireNotNull(extraction.date.value),
             type = requireNotNull(extraction.transactionType.value),
-            paymentMethod = requireNotNull(extraction.paymentMethod.value),
+            paymentMethod = extraction.paymentMethod.value.orEmpty(),
             category = requireNotNull(extraction.category.value),
             amountIdr = requireNotNull(extraction.amountIdr.value),
             description = extraction.description.value,
         )
     }
 }
-

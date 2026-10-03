@@ -105,6 +105,21 @@ Worker behavior:
 
 Do not create aggressive polling. Connectivity-triggered/queued work is sufficient.
 
+## 5a. Data/Workbook transfer
+
+Settings → Data / Workbook lists server years and exposes create, annual XLSM
+export, all-years ZIP export and confirmed XLSM import. Onboarding also offers
+import. The app copies opaque bytes through Android's system document picker;
+it never edits workbook internals. Bounded private staging avoids loading large
+packages into memory. Export includes server content only and warns about local
+pending changes. Import requires an explicit year and separate replacement
+confirmation, rechecks all Room outbox operations under a shared sync/pull gate,
+and excludes local mutations during replacement. Ordinary sync does not block
+offline entry. Selected-year canonical cache/Master are invalidated before upload
+to survive ambiguous responses/process death; failed attempts also need reload.
+No automatic retry of a connection-failed import. See
+`development/WORKBOOK_MENU_SMOKE.md` for acceptance steps and limitations.
+
 ## 6. LLM lifecycle
 
 Hard requirement: normal app startup and manual entry do not load the LLM.
@@ -113,10 +128,10 @@ Smart Scan:
 
 ```text
 image acquired
-   ├── start OCR
-   └── start lazy model load
-        ↓
-extraction
+   ↓
+local OCR + evidence rules → validated review draft
+   ↓ (only when the user requests AI suggestions)
+lazy model load → semantic suggestions → merge and revalidate
 ```
 
 Model manager may keep the model resident for a configurable short idle timeout (default proposal: 60 seconds), then release it.
@@ -181,17 +196,22 @@ Camera captures live only in private cache and are deleted after use. The Phase
 confidence assignment belong to Phase 8.
 
 Phase 8B adds a local extraction module around a pinned LiteRT-LM Android
-adapter. Starting a scan begins model initialization in the application
-background scope while OCR runs. The per-scan request waits for that shared
-initialization, performs one structured extraction, validates it against
-Master, and then releases its lease. The model remains resident for at most 60
-idle seconds and is unloaded when no scan request remains. Missing/incompatible
-models or malformed output never fail OCR or manual entry; they produce an
-explicit unavailable/failure status and an incomplete review draft.
+adapter. Since the 2026-10-03 UX iteration, OCR alone produces a review draft.
+An explicit AI action acquires a model lease, performs structured extraction,
+merges supported evidence, validates against the latest Master, and releases
+the lease. The model remains resident for at most 60 idle seconds after the
+last request. Missing/incompatible models or malformed output never fail OCR
+or manual entry; the evidence draft remains usable.
 
-The model is not loaded by application startup, login, Home, manual entry, or
-sync. No model artifact is bundled or committed while candidate benchmarking is
-open.
+An in-memory scan review session owns the optional job and immutable result.
+Cancellation, image replacement, discard, or entry into the editor invalidates
+late AI results. Native synchronous inference may finish before its resource
+cleanup; cancellation does not promise an immediate native interrupt. Human
+editor state is never updated by a late model response.
+
+The model is not loaded by application startup, login, Home, image selection,
+OCR-only review, manual entry, or sync. No model artifact is bundled or committed
+while candidate benchmarking is open.
 
 ## 10. UI style
 
@@ -205,3 +225,18 @@ Minimal but not visually dead:
 - amount input and primary actions should be easy to reach.
 
 The visual system can be iterated after a functional prototype.
+
+The transaction editor uses integer-IDR input with visual thousands grouping,
+a calendar date picker, field-width anchored menus for type/payment, and a
+searchable category bottom sheet constrained to the selected type's Master
+values. Missing scan dates/types stay empty rather than inheriting manual-entry
+defaults. Validation blocks missing required, out-of-Master, non-integer, overflow, and
+invalid date values, including cross-year edits of synchronized transactions.
+
+Payment is optional for manual and scan-assisted entry, with an explicit clear
+action and neutral missing-value text. Unknown nonblank methods are still
+rejected. Home displays a non-blocking completeness reminder based on the full
+cached selected-month list, not the search results. Its review filter composes
+with text search and excludes deleted rows. Missing type/category/amount/date
+can also be flagged defensively, but saving these fields empty remains invalid.
+Neither reminders nor blank payments alter sync status or monthly totals.

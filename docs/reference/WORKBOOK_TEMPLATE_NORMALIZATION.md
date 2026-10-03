@@ -154,6 +154,12 @@ The regression fixture is now available as `tests/workbook-fixtures/LajurWorkboo
 
 ## Automation policy
 
+The [2026-10-03 updated-source audit](WORKBOOK_SOURCE_AUDIT_2026_10_03.md) records
+new Master/date-helper/balance-formula variants and import blockers. That source
+has not replaced the reviewed production template. Future cleaning must preserve
+approved formulas such as the new Des D1 roll-forward rather than blindly
+clearing every B1/D1 cell as if it were a manual value.
+
 The long-term normalization tool should be idempotent:
 
 - audit mode reports deviations without editing;

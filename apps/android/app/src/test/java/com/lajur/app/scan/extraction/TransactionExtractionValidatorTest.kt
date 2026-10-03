@@ -13,6 +13,18 @@ import org.junit.Test
 class TransactionExtractionValidatorTest {
     private val validator = TransactionExtractionValidator()
 
+    @Test fun `missing or blank payment is optional while other fields remain required`() {
+        for (payment in listOf(ExtractedField<String>(), field("   "))) {
+            val result = validator.validate(validExtraction().copy(paymentMethod = payment), master())
+            assertTrue(result.isReadyToSave)
+            assertEquals("", result.toTransactionDraftOrNull()?.paymentMethod)
+            assertTrue(result.issues.none { it.field == ExtractionFieldName.PAYMENT_METHOD })
+        }
+        val missingType = validator.validate(validExtraction().copy(transactionType = ExtractedField(), paymentMethod = ExtractedField()), master())
+        assertFalse(missingType.isReadyToSave)
+        assertNull(missingType.toTransactionDraftOrNull())
+    }
+
     @Test
     fun `valid extraction canonicalizes Master values and becomes a transaction draft`() {
         val result = validator.validate(

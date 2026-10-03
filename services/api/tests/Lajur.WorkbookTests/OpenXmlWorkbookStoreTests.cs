@@ -94,6 +94,54 @@ public sealed partial class OpenXmlWorkbookStoreTests
         Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(workspace.WorkbookPath)!, ".lajur-*.tmp.xlsm"));
     }
 
+    [Theory]
+    [InlineData("Pengeluaran", "Kategori Uji 10")]
+    [InlineData("Pemasukan", "Pendapatan Uji 01")]
+    public async Task OptionalPayment_CanBeFilledAndClearedOnTheSameRowWithoutLosingWorkbookParts(string type, string category)
+    {
+        using var workspace = new WorkbookWorkspace(FixturePath, 2026);
+        var store = new OpenXmlWorkbookStore(workspace.RootPath);
+        var id = Guid.NewGuid();
+        var audit = new WorkbookAuditContext(WorkbookChangeSource.Android, "device-test", "optional-payment");
+        var draft = new WorkbookTransactionDraft(new DateOnly(2026, 3, 8), type, "", category, 33_000, "Advanced expense test");
+        var packageBefore = ReadPackageHashes(workspace.WorkbookPath);
+        var allowed = ReadExpectedChangedParts(workspace.WorkbookPath, "Mar", "MarTable");
+        var rightSide = ReadRightSideCells(workspace.WorkbookPath, "Mar");
+        var paymentStyle = ReadPaymentCell(workspace.WorkbookPath).StyleIndex?.Value;
+        var created = await store.CreateTransactionAsync(workspace.Key, new(id, draft, audit));
+        var retried = await store.CreateTransactionAsync(workspace.Key, new(id, draft, audit));
+        Assert.Equal(created, retried);
+        AssertUnrelatedPackagePartsUnchanged(packageBefore, ReadPackageHashes(workspace.WorkbookPath), allowed);
+        var reader = new OpenXmlWorkbookReader();
+        Assert.Equal("", Assert.Single(reader.ReadMonthlyTransactions(workspace.WorkbookPath, 3)).PaymentMethod);
+        Assert.Equal("", Assert.Single(reader.ReadApplicationTransactions(workspace.WorkbookPath, 2026, 3)).PaymentMethod);
+        Assert.Equal(paymentStyle, ReadPaymentCell(workspace.WorkbookPath).StyleIndex?.Value);
+        Assert.Equal("", ReadPaymentCell(workspace.WorkbookPath).InnerText);
+
+        var filled = await store.UpdateTransactionAsync(workspace.Key, new(id, 1, draft with { PaymentMethod = "Bank Uji" }, audit));
+        Assert.Equal(2, filled.Revision);
+        Assert.Equal(id, filled.TransactionId);
+        var cleared = await store.UpdateTransactionAsync(workspace.Key, new(id, 2, draft, audit));
+        Assert.Equal(3, cleared.Revision);
+        Assert.Equal("", cleared.PaymentMethod);
+        Assert.Equal("A5:F6", ReadTableReference(workspace.WorkbookPath, "Mar", "MarTable"));
+        Assert.Equal(draft.AmountIdr, Assert.Single(reader.ReadApplicationTransactions(workspace.WorkbookPath, 2026, 3)).AmountIdr);
+        Assert.Equal(rightSide, ReadRightSideCells(workspace.WorkbookPath, "Mar"));
+        Assert.Equal(packageBefore["xl/vbaProject.bin"], ReadPackageHashes(workspace.WorkbookPath)["xl/vbaProject.bin"]);
+        Assert.Equal(paymentStyle, ReadPaymentCell(workspace.WorkbookPath).StyleIndex?.Value);
+        Assert.Equal("", ReadPaymentCell(workspace.WorkbookPath).InnerText);
+        AssertUnrelatedPackagePartsUnchanged(packageBefore, ReadPackageHashes(workspace.WorkbookPath), allowed);
+    }
+
+    private static Cell ReadPaymentCell(string path)
+    {
+        using var document = SpreadsheetDocument.Open(path, false);
+        var workbook = document.WorkbookPart!;
+        var sheet = workbook.Workbook!.Sheets!.Elements<Sheet>().Single(sheet => sheet.Name?.Value == "Mar");
+        var part = (WorksheetPart)workbook.GetPartById(sheet.Id!.Value!);
+        return (Cell)part.Worksheet!.Descendants<Cell>().Single(cell => cell.CellReference?.Value == "C6").CloneNode(true);
+    }
+
     [Fact]
     public async Task ConcurrentCreatesForSameWorkbook_AreSerializedWithoutLostRows()
     {

@@ -1,6 +1,9 @@
 package com.lajur.app.data.remote
 
 import com.lajur.app.domain.MasterData
+import com.lajur.app.data.WorkbookTransfers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -8,8 +11,11 @@ import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class ApiException(
@@ -33,6 +39,12 @@ class LajurApiClient(
 ) {
     private val root = baseUrl.trim().trimEnd('/')
     private val mediaType = "application/json; charset=utf-8".toMediaType()
+    private val transferClient = client.newBuilder()
+        .readTimeout(90, TimeUnit.SECONDS)
+        .writeTimeout(90, TimeUnit.SECONDS)
+        .callTimeout(120, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(false)
+        .build()
 
     suspend fun login(request: LoginRequest): AuthTokensDto =
         post("auth/login", json.encodeToString(request), null)
@@ -53,6 +65,44 @@ class LajurApiClient(
 
     suspend fun createWorkbook(year: Int, accessToken: String) {
         execute(Request.Builder().url(url("workbooks/$year/create")).post(ByteArray(0).toRequestBody()).bearer(accessToken).build())
+    }
+
+    suspend fun listWorkbooks(accessToken: String): List<WorkbookInfoDto> = get("workbooks", accessToken)
+
+    suspend fun importWorkbook(file: File, year: Int, replace: Boolean, accessToken: String): WorkbookImportDto {
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("year", year.toString())
+            .addFormDataPart("replaceExisting", replace.toString())
+            .addFormDataPart("confirmNoPendingChanges", "true")
+            .addFormDataPart("file", "workbook.xlsm", file.asRequestBody(WorkbookTransfers.XLSM_TYPE.toMediaType()))
+            .build()
+        return decode(execute(Request.Builder().url(url("workbooks/import")).post(body).bearer(accessToken).build(), transferClient))
+    }
+
+    suspend fun exportWorkbook(year: Int?, destination: File, accessToken: String) = withContext(Dispatchers.IO) {
+        val path = if (year == null) "workbooks/export-all" else "workbooks/$year/export"
+        val request = Request.Builder().url(url(path)).get().bearer(accessToken).build()
+        val context = currentCoroutineContext()
+        try {
+            transferClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val problem = runCatching { json.decodeFromString<ProblemDto>(response.body.string()) }.getOrNull()
+                    throw ApiException(response.code, problem?.code, problem?.detail ?: "Ekspor gagal (${response.code}).")
+                }
+                val expected = if (year == null) WorkbookTransfers.ZIP_TYPE else WorkbookTransfers.XLSM_TYPE
+                check(response.body.contentType()?.toString()?.substringBefore(';').equals(expected, true)) {
+                    "Server tidak mengirim file workbook yang diharapkan."
+                }
+                check(response.body.contentLength() <= WorkbookTransfers.MAX_EXPORT_BYTES) { "Ekspor terlalu besar." }
+                destination.outputStream().use { output ->
+                    response.body.byteStream().use { input ->
+                        WorkbookTransfers.copyLimited(input, output, WorkbookTransfers.MAX_EXPORT_BYTES) { context.ensureActive() }
+                    }
+                }
+            }
+        } catch (error: IOException) {
+            throw ApiException(null, "network_unavailable", "Tidak dapat mengunduh workbook dari server.", error)
+        }
     }
 
     suspend fun getMaster(year: Int, accessToken: String): MasterData =
@@ -109,9 +159,9 @@ class LajurApiClient(
         return decode(execute(request))
     }
 
-    private suspend fun execute(request: Request): String = withContext(Dispatchers.IO) {
+    private suspend fun execute(request: Request, http: OkHttpClient = client): String = withContext(Dispatchers.IO) {
         try {
-            client.newCall(request).execute().use { response ->
+            http.newCall(request).execute().use { response ->
                 val body = response.body.string()
                 if (!response.isSuccessful) {
                     val problem = runCatching { json.decodeFromString<ProblemDto>(body) }.getOrNull()

@@ -10,6 +10,15 @@ import org.junit.Test
 class ApiModelsSerializationTest {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
+    @Test fun `empty payment round trips through API and outbox JSON`() {
+        val request = CreateTransactionRequest("dummy-id", "2026-10-03", "Pengeluaran", "", "Makan", 25_000)
+        val encoded = json.encodeToString(request)
+        assertTrue(encoded.contains("\"paymentMethod\":\"\""))
+        assertEquals("", json.decodeFromString<CreateTransactionRequest>(encoded).paymentMethod)
+        val response = FinanceTransactionDto("dummy-id", 1, "2026-10-03", "Pengeluaran", "", "Makan", 25_000)
+        assertEquals(response, json.decodeFromString<FinanceTransactionDto>(json.encodeToString(response)))
+    }
+
     @Test
     fun `ASP NET camel case transaction response decodes`() {
         val response = """

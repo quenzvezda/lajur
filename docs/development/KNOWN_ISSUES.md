@@ -1,7 +1,23 @@
 # Known issues
 
 Issues listed here are confirmed but intentionally deferred. They must not be
-silently treated as passing acceptance criteria.
+silently treated as passing acceptance criteria. A test-only intermittent failure
+is labeled separately and is not a confirmed production defect.
+
+## API-001 — Intermittent concurrent-create test HTTP 500
+
+- **Status:** Observed once, cause unconfirmed; investigate if repeated.
+- **Environment:** Windows .NET 10 local full solution test run, 2026-10-03.
+- **Observed:** One of ten concurrent identical creates returned HTTP 500 in the
+  existing integration test. The focused rerun and subsequent full solution run
+  passed without changing the create/locking implementation. New optional-payment
+  tests passed in both full runs; this does not prove the intermittent fault fixed.
+- **Follow-up:** Capture failing request/problem and server exception under a
+  repeated concurrent harness; distinguish workbook file access from auth/test
+  infrastructure contention before proposing a fix. The assertion now includes
+  the failed response body. Do not suppress this regression or weaken CI assertions.
+- **Limit:** The requested five-run shell loop was blocked by the terminal
+  allowlist; no high-reproduction-rate stress result is claimed.
 
 ## AND-001 — Recent Apps content protection is ineffective on the test AVD
 

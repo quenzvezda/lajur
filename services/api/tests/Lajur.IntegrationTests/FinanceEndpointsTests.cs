@@ -70,7 +70,11 @@ public sealed class FinanceEndpointsTests
         var responses = await Task.WhenAll(requests);
         try
         {
-            Assert.All(responses, response => Assert.Equal(HttpStatusCode.Created, response.StatusCode));
+            foreach (var response in responses)
+            {
+                Assert.True(response.StatusCode == HttpStatusCode.Created,
+                    $"Expected Created, got {response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+            }
         }
         finally
         {
@@ -205,6 +209,73 @@ public sealed class FinanceEndpointsTests
         Assert.Equal("request_validation_failed", await ReadProblemCodeAsync(malformedResponse));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Optional_payment_is_canonical_and_filling_or_clearing_does_not_duplicate_expense(string? payment)
+    {
+        using var factory = new LajurApiFactory();
+        var userId = await CreateAccountAsync(factory, "optional-payment", Password);
+        SeedWorkbook(factory, userId, 2026);
+        using var client = await CreateAuthenticatedClientAsync(factory, "optional-payment", Password);
+        var before = await client.GetFromJsonAsync<FinanceSummary>("/api/v1/summary?year=2026&month=1");
+        var id = Guid.NewGuid();
+        var payload = TransactionPayload(id, "Payment can be filled later") with { PaymentMethod = payment };
+        using var create = await client.PostAsJsonAsync("/api/v1/transactions", payload);
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var created = await create.Content.ReadFromJsonAsync<FinanceTransaction>();
+        Assert.Equal("", created!.PaymentMethod);
+        using var retry = await client.PostAsJsonAsync("/api/v1/transactions", payload with { PaymentMethod = "" });
+        retry.EnsureSuccessStatusCode();
+        Assert.Equal(1, (await retry.Content.ReadFromJsonAsync<FinanceTransaction>())!.Revision);
+        var revision = 1;
+        foreach (var method in new string?[] { "Bank Uji", null })
+        {
+            using var update = await client.PutAsJsonAsync($"/api/v1/transactions/{id:D}?year=2026", new
+            {
+                expectedRevision = revision, payload.Date, payload.Type,
+                paymentMethod = method, payload.Category, payload.AmountIdr, payload.Description
+            });
+            update.EnsureSuccessStatusCode();
+            var updated = await update.Content.ReadFromJsonAsync<FinanceTransaction>();
+            Assert.Equal(id, updated!.TransactionId);
+            Assert.Equal(++revision, updated.Revision);
+            Assert.Equal(method ?? "", updated.PaymentMethod);
+            var summary = await client.GetFromJsonAsync<FinanceSummary>("/api/v1/summary?year=2026&month=1");
+            Assert.Equal(before!.ExpenseIdr + payload.AmountIdr, summary!.ExpenseIdr);
+            Assert.Equal(before.TransactionCount + 1, summary.TransactionCount);
+        }
+        using var unknown = await client.PostAsJsonAsync("/api/v1/transactions",
+            payload with { TransactionId = Guid.NewGuid(), PaymentMethod = "Not in Master" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, unknown.StatusCode);
+    }
+
+    [Fact]
+    public async Task Omitted_payment_is_accepted_but_type_and_category_remain_required()
+    {
+        using var factory = new LajurApiFactory();
+        var userId = await CreateAccountAsync(factory, "omitted-payment", Password);
+        SeedWorkbook(factory, userId, 2026);
+        using var client = await CreateAuthenticatedClientAsync(factory, "omitted-payment", Password);
+        using var create = await client.PostAsJsonAsync("/api/v1/transactions", new
+        {
+            transactionId = Guid.NewGuid(), date = "2026-01-12", type = "Pengeluaran",
+            category = "Kategori Uji 10", amountIdr = 123_000
+        });
+        create.EnsureSuccessStatusCode();
+        Assert.Equal("", (await create.Content.ReadFromJsonAsync<FinanceTransaction>())!.PaymentMethod);
+        foreach (var invalid in new[]
+        {
+            TransactionPayload(Guid.NewGuid(), "Missing type") with { Type = "", PaymentMethod = "" },
+            TransactionPayload(Guid.NewGuid(), "Missing category") with { Category = "", PaymentMethod = "" }
+        })
+        {
+            using var rejected = await client.PostAsJsonAsync("/api/v1/transactions", invalid);
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        }
+    }
+
     private static async Task<Guid> CreateAccountAsync(
         LajurApiFactory factory,
         string username,
@@ -310,7 +381,7 @@ public sealed class FinanceEndpointsTests
         Guid TransactionId,
         string Date,
         string Type,
-        string PaymentMethod,
+        string? PaymentMethod,
         string Category,
         long AmountIdr,
         string Description);

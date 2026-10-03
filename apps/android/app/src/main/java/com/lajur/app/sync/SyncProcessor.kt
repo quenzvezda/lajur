@@ -13,7 +13,9 @@ class SyncProcessor(
     private val finance: FinanceRepository,
     private val session: SessionRepository,
 ) {
-    suspend fun run(): SyncRunResult {
+    suspend fun run(): SyncRunResult = finance.operationGate.remoteChange { runExclusive() }
+
+    private suspend fun runExclusive(): SyncRunResult {
         while (true) {
             val operation = finance.nextOutbox() ?: return SyncRunResult.COMPLETE
             finance.markSyncing(operation.transactionId)

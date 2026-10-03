@@ -37,6 +37,16 @@ and are filtered against Master data for constrained fields.
 **Financial source of truth**  
 The authoritative storage of finance records. In Lajur this is the Excel workbook.
 
+**Pengeluaran ditalangi (advanced expense)**  
+An expense temporarily paid by someone else that the owner will reimburse later,
+potentially together with other expenses in one payment. It is not itself an
+unsynchronized transaction or a missing financial record.
+
+In the owner's workflow, payment may be left blank and filled on the original
+transaction when reimbursed. No separate repayment or settlement status is
+introduced. Blank payment means unspecified method; it does not universally
+assert debt/unpaid state. The expense remains included in its transaction month.
+
 **Master data**  
 Categories, transaction types, payment methods, budgets, and related domain values read from workbook `Master`.
 

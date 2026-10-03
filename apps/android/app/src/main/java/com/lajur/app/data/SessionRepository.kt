@@ -30,6 +30,7 @@ class SessionRepository(
     private val store: SecureSessionStore,
     private val database: LajurDatabase,
     private val json: Json,
+    private val operationGate: FinanceOperationGate = FinanceOperationGate(),
 ) {
     private val refreshMutex = Mutex()
     private val mutableState = MutableStateFlow<SessionState>(SessionState.Restoring)
@@ -56,37 +57,47 @@ class SessionRepository(
     }
 
     suspend fun login(serverUrl: String, username: String, password: String): Result<Unit> = runCatching {
-        val normalizedUrl = normalizeServerUrl(serverUrl)
-        val api = LajurApiClient(normalizedUrl, json)
-        val previous = store.read()
-        val tokens = api.login(
-            LoginRequest(
-                username = username.trim(),
-                password = password,
-                deviceId = previous?.takeIf { it.serverUrl == normalizedUrl && it.username == username.trim() }?.deviceId,
-                deviceLabel = "Android Lajur",
-            ),
-        )
-        val me = api.me(tokens.accessToken)
-        if (previous != null && previous.userId != me.userId) {
-            clearLocalFinanceData()
+        operationGate.remoteChange {
+            operationGate.localChange {
+                val normalizedUrl = normalizeServerUrl(serverUrl)
+                val api = LajurApiClient(normalizedUrl, json)
+                val previous = store.read()
+                val tokens = api.login(
+                    LoginRequest(
+                        username = username.trim(),
+                        password = password,
+                        deviceId = previous?.takeIf { it.serverUrl == normalizedUrl && it.username == username.trim() }?.deviceId,
+                        deviceLabel = "Android Lajur",
+                    ),
+                )
+                val me = api.me(tokens.accessToken)
+                if (previous != null && previous.userId != me.userId) {
+                    clearLocalFinanceData()
+                }
+                val session = tokens.toPersisted(normalizedUrl, me)
+                store.write(session)
+                persisted = session
+                accessToken = tokens.accessToken
+                mutableState.value = SessionState.SignedIn(
+                    session,
+                    me.needsWorkbookOnboarding,
+                    me.workbookYears,
+                    offline = false,
+                )
+            }
         }
-        val session = tokens.toPersisted(normalizedUrl, me)
-        store.write(session)
-        persisted = session
-        accessToken = tokens.accessToken
-        mutableState.value = SessionState.SignedIn(
-            session,
-            me.needsWorkbookOnboarding,
-            me.workbookYears,
-            offline = false,
-        )
     }
 
     suspend fun createCurrentYearWorkbook(year: Int): Result<Unit> = runCatching {
-        authorized { api, token -> api.createWorkbook(year, token) }
-        val me = authorized { api, token -> api.me(token) }
-        updateFromMe(me, offline = false)
+        operationGate.remoteChange {
+            authorized { api, token -> api.createWorkbook(year, token) }
+            val me = authorized { api, token -> api.me(token) }
+            updateFromMe(me, offline = false)
+        }
+    }
+
+    suspend fun reloadWorkbookState() {
+        updateFromMe(authorized { api, token -> api.me(token) }, offline = false)
     }
 
     suspend fun <T> authorized(action: suspend (LajurApiClient, String) -> T): T {
@@ -108,7 +119,7 @@ class SessionRepository(
         mutableState.value = SessionState.SignedOut
     }
 
-    suspend fun signOut() {
+    suspend fun signOut() = operationGate.remoteChange {
         try {
             if (persisted != null) {
                 authorized { api, token -> api.logout(token) }

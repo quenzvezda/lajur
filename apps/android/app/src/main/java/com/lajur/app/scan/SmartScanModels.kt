@@ -1,5 +1,7 @@
 package com.lajur.app.scan
 
+import kotlinx.serialization.Serializable
+
 enum class ScanImageSource { SHARE, GALLERY, CAMERA }
 
 data class ScanImageRequest(
@@ -7,6 +9,7 @@ data class ScanImageRequest(
     val source: ScanImageSource,
 )
 
+@Serializable
 data class ScanImageMetadata(
     val originalWidth: Int,
     val originalHeight: Int,
@@ -15,6 +18,7 @@ data class ScanImageMetadata(
     val sampleSize: Int,
 )
 
+@Serializable
 data class OcrTextBlock(
     val text: String,
     val left: Int?,
@@ -23,10 +27,12 @@ data class OcrTextBlock(
     val bottom: Int?,
 )
 
+@Serializable
 data class OcrResult(
     val text: String,
     val blocks: List<OcrTextBlock>,
     val recognitionMillis: Long,
+    val lines: List<OcrTextBlock> = emptyList(),
 )
 
 data class SmartScanOutput(

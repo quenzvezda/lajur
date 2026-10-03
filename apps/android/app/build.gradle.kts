@@ -45,6 +45,12 @@ android {
         compose = true
         buildConfig = true
     }
+    sourceSets {
+        getByName("test").kotlin.directories.add("src/sharedTest/java")
+        getByName("test").resources.directories.add("../../../tests/smart-scan-eval")
+        getByName("androidTest").kotlin.directories.add("src/sharedTest/java")
+        getByName("androidTest").assets.directories.add("../../../tests/smart-scan-eval")
+    }
 }
 
 ksp {

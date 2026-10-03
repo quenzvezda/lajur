@@ -33,6 +33,7 @@ class FinanceRepository(
     private val scheduler: SyncScheduler,
     private val json: Json,
     private val now: () -> Long = System::currentTimeMillis,
+    val operationGate: FinanceOperationGate = FinanceOperationGate(),
 ) {
     private val dao: LajurDao = database.dao()
 
@@ -60,7 +61,7 @@ class FinanceRepository(
     suspend fun getTransaction(transactionId: String): LocalTransaction? =
         dao.getTransaction(transactionId)?.toDomain()
 
-    suspend fun create(draft: TransactionDraft): String {
+    suspend fun create(draft: TransactionDraft): String = operationGate.localChange {
         validate(draft)
         val id = UUID.randomUUID().toString()
         database.withTransaction {
@@ -68,10 +69,10 @@ class FinanceRepository(
             persistOperation(id, OutboxPlanner.plan(null, OutboxOperationType.CREATE, null, draft))
         }
         scheduler.enqueue()
-        return id
+        id
     }
 
-    suspend fun update(transactionId: String, draft: TransactionDraft) {
+    suspend fun update(transactionId: String, draft: TransactionDraft) = operationGate.localChange {
         validate(draft)
         database.withTransaction {
             val current = requireNotNull(dao.getTransaction(transactionId))
@@ -88,7 +89,7 @@ class FinanceRepository(
         scheduler.enqueue()
     }
 
-    suspend fun delete(transactionId: String) {
+    suspend fun delete(transactionId: String) = operationGate.localChange {
         database.withTransaction {
             val current = requireNotNull(dao.getTransaction(transactionId))
             val existing = dao.getOutboxForTransaction(transactionId)?.toPendingOperation()
@@ -112,16 +113,18 @@ class FinanceRepository(
     }
 
     suspend fun refreshMonth(month: YearMonth): Result<Unit> = runCatching {
-        val serverRows = sessionRepository.authorized { api, token ->
-            api.listTransactions(month.year, month.monthValue, token)
+        operationGate.remoteChange {
+            val serverRows = sessionRepository.authorized { api, token ->
+                api.listTransactions(month.year, month.monthValue, token)
+            }
+            database.withTransaction {
+                val protected = dao.getUnsyncedTransactionIds()
+                if (protected.isEmpty()) dao.deleteSyncedMonth(month.toString())
+                else dao.deleteSyncedMonthExcept(month.toString(), protected)
+                dao.upsertTransactions(serverRows.filterNot { it.transactionId in protected }.map(::serverEntity))
+            }
+            refreshMaster(month.year)
         }
-        database.withTransaction {
-            val protected = dao.getUnsyncedTransactionIds()
-            if (protected.isEmpty()) dao.deleteSyncedMonth(month.toString())
-            else dao.deleteSyncedMonthExcept(month.toString(), protected)
-            dao.upsertTransactions(serverRows.filterNot { it.transactionId in protected }.map(::serverEntity))
-        }
-        refreshMaster(month.year)
     }
 
     suspend fun refreshMaster(year: Int) {
@@ -233,7 +236,6 @@ class FinanceRepository(
     private fun validate(draft: TransactionDraft) {
         require(runCatching { java.time.LocalDate.parse(draft.date) }.isSuccess) { "Tanggal tidak valid." }
         require(draft.type.isNotBlank()) { "Tipe wajib dipilih." }
-        require(draft.paymentMethod.isNotBlank()) { "Pembayaran wajib dipilih." }
         require(draft.category.isNotBlank()) { "Kategori wajib dipilih." }
         require(draft.amountIdr > 0) { "Jumlah harus lebih dari nol." }
     }

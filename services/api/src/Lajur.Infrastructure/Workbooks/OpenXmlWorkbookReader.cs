@@ -389,7 +389,7 @@ public sealed partial class OpenXmlWorkbookReader
                 || revision < 1
                 || snapshot.AmountIdr <= 0
                 || string.IsNullOrWhiteSpace(snapshot.Type)
-                || string.IsNullOrWhiteSpace(snapshot.PaymentMethod)
+                || snapshot.PaymentMethod is null
                 || string.IsNullOrWhiteSpace(snapshot.Category))
             {
                 throw InvalidWorkbook($"System index row {row.RowIndex?.Value} has inconsistent transaction data.");
@@ -416,7 +416,7 @@ public sealed partial class OpenXmlWorkbookReader
     {
         var date = ParseDate(Required(values[0], month, rowNumber, ExpectedHeaders[0]), month, rowNumber);
         var type = Required(values[1], month, rowNumber, ExpectedHeaders[1]);
-        var paymentMethod = Required(values[2], month, rowNumber, ExpectedHeaders[2]);
+        var paymentMethod = values[2]?.Trim() ?? string.Empty;
         var category = Required(values[3], month, rowNumber, ExpectedHeaders[3]);
         var amount = ParseAmount(Required(values[4], month, rowNumber, ExpectedHeaders[4]), month, rowNumber);
         var description = string.IsNullOrWhiteSpace(values[5]) ? null : values[5];

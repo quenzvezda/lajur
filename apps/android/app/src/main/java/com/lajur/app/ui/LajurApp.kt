@@ -13,13 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
@@ -42,26 +39,21 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lajur.app.data.SessionState
 import com.lajur.app.domain.LocalTransaction
-import com.lajur.app.domain.MasterData
 import com.lajur.app.domain.SyncCounts
 import com.lajur.app.domain.SyncState
-import com.lajur.app.domain.TransactionDraft
 import com.lajur.app.security.AppLockSettings
 import com.lajur.app.security.AppLockStatus
-import com.lajur.app.scan.ScanImageSource
 import com.lajur.app.scan.SmartScanState
-import com.lajur.app.scan.extraction.ExtractedField
-import com.lajur.app.scan.extraction.ExtractionConfidence
-import com.lajur.app.scan.extraction.ExtractionFieldName
+import com.lajur.app.scan.ScanSuggestionState
 import com.lajur.app.scan.extraction.ValidatedTransactionExtraction
 import java.text.NumberFormat
-import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -69,6 +61,7 @@ import java.util.Locale
 private sealed interface AppScreen {
     data object Home : AppScreen
     data object Settings : AppScreen
+    data object Workbooks : AppScreen
     data object SmartScan : AppScreen
     data class Editor(
         val transaction: LocalTransaction?,
@@ -89,6 +82,7 @@ fun LajurApp(
     val message by viewModel.message.collectAsStateWithLifecycle()
     val lockStatus by viewModel.appLockStatus.collectAsStateWithLifecycle()
     val lockSettings by viewModel.appLockSettings.collectAsStateWithLifecycle()
+    var workbookSetup by remember { mutableStateOf(false) }
     when (val state = session) {
         SessionState.Restoring -> LoadingScreen()
         SessionState.SignedOut -> LoginScreen(
@@ -109,7 +103,8 @@ fun LajurApp(
                 onSignOut = viewModel::signOut,
             )
             AppLockStatus.UNLOCKED -> if (state.needsWorkbookOnboarding) {
-                OnboardingScreen(busy, { viewModel.createWorkbook() }, viewModel::signOut)
+                if (workbookSetup) WorkbookRoute(viewModel) { workbookSetup = false }
+                else OnboardingScreen(busy, { viewModel.createWorkbook() }, { workbookSetup = true }, viewModel::signOut)
             } else {
                 SignedInApp(viewModel, state, authenticate, pickImage, takePhoto)
             }
@@ -135,8 +130,9 @@ private fun SignedInApp(
     val lockSettings by viewModel.appLockSettings.collectAsStateWithLifecycle()
     val pendingSharedImage by viewModel.pendingSharedImage.collectAsStateWithLifecycle()
     val smartScanState by viewModel.smartScanState.collectAsStateWithLifecycle()
-    val extractionReview by viewModel.extractionReview.collectAsStateWithLifecycle()
-    val extractionStatus by viewModel.extractionStatus.collectAsStateWithLifecycle()
+    val scanReview by viewModel.scanReview.collectAsStateWithLifecycle()
+    val scanReportSaving by viewModel.scanReportSaving.collectAsStateWithLifecycle()
+    val scanDiagnosticStatus by viewModel.scanDiagnosticStatus.collectAsStateWithLifecycle()
     var screen: AppScreen by remember { mutableStateOf(AppScreen.Home) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -204,11 +200,17 @@ private fun SignedInApp(
             onTimeout = viewModel::setAppLockTimeout,
             onScreenProtection = viewModel::setScreenProtectionEnabled,
             onLockNow = viewModel::lockNow,
+            onData = { screen = AppScreen.Workbooks },
         )
+        AppScreen.Workbooks -> WorkbookRoute(viewModel) { screen = AppScreen.Settings }
         AppScreen.SmartScan -> SmartScanScreen(
             state = smartScanState,
-            extractionReview = extractionReview,
-            extractionStatus = extractionStatus,
+            snapshot = scanReview,
+            canSaveScanReport = scanReview != null && scanReview?.suggestions != ScanSuggestionState.RUNNING && !scanReportSaving,
+            scanDiagnosticStatus = scanDiagnosticStatus,
+            onSaveScanReport = viewModel::saveScanDiagnostic,
+            onRequestSuggestions = viewModel::requestScanSuggestions,
+            onCancelSuggestions = viewModel::cancelScanSuggestions,
             onProcess = viewModel::processScan,
             onRetry = viewModel::processScan,
             onBack = {
@@ -311,7 +313,7 @@ private fun LoginScreen(
 }
 
 @Composable
-private fun OnboardingScreen(busy: Boolean, onCreate: () -> Unit, onSignOut: () -> Unit) {
+private fun OnboardingScreen(busy: Boolean, onCreate: () -> Unit, onImport: () -> Unit, onSignOut: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -322,13 +324,14 @@ private fun OnboardingScreen(busy: Boolean, onCreate: () -> Unit, onSignOut: () 
         Button(onClick = onCreate, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text(if (busy) "Membuat…" else "Buat workbook ${YearMonth.now().year}")
         }
+        OutlinedButton(onClick = onImport, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Impor workbook yang sudah ada") }
         TextButton(onClick = onSignOut, modifier = Modifier.align(Alignment.End)) { Text("Keluar") }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeScreen(
+internal fun HomeScreen(
     month: YearMonth,
     transactions: List<LocalTransaction>,
     incomeIdr: Long,
@@ -354,6 +357,9 @@ private fun HomeScreen(
     onSettings: () -> Unit,
     onSignOut: () -> Unit,
 ) {
+    var incompleteOnly by rememberSaveable(month.toString()) { mutableStateOf(false) }
+    val incompleteCount = transactions.count { !it.isDeleted && missingTransactionFields(it.draft).isNotEmpty() }
+    val visibleTransactions = filterTransactionReview(transactions, query, incompleteOnly)
     Scaffold(
         topBar = {
             TopAppBar(
@@ -370,7 +376,7 @@ private fun HomeScreen(
         },
     ) { padding ->
         LazyColumn(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp).testTag("home-content"),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
@@ -437,6 +443,21 @@ private fun HomeScreen(
                     TextButton(onClick = onRefresh) { Text("Refresh") }
                 }
             }
+            if (incompleteCount > 0 || incompleteOnly) item {
+                Card(Modifier.fillMaxWidth().testTag("transaction-review-reminder")) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Perlu dilengkapi", style = MaterialTheme.typography.titleMedium)
+                        Text("$incompleteCount transaksi pada data bulan ini yang sudah dimuat. " +
+                            "Pembayaran boleh diisi nanti; transaksi tetap dihitung dalam ringkasan.")
+                        TextButton(onClick = {
+                            incompleteOnly = !incompleteOnly
+                            onQueryChange("")
+                        }, modifier = Modifier.testTag("transaction-review-toggle")) {
+                            Text(if (incompleteOnly) "Lihat semua transaksi" else "Lihat transaksi")
+                        }
+                    }
+                }
+            }
             item {
                 OutlinedTextField(
                     query,
@@ -446,10 +467,12 @@ private fun HomeScreen(
                     singleLine = true,
                 )
             }
-            if (transactions.isEmpty()) {
-                item { Text("Belum ada transaksi untuk bulan ini.", Modifier.padding(vertical = 24.dp)) }
+            if (visibleTransactions.isEmpty()) {
+                item { Text(if (incompleteOnly) "Tidak ada transaksi yang perlu dilengkapi pada hasil ini."
+                    else if (query.isNotBlank()) "Transaksi tidak ditemukan."
+                    else "Belum ada transaksi untuk bulan ini.", Modifier.padding(vertical = 24.dp)) }
             } else {
-                items(transactions, key = { it.transactionId }) { transaction ->
+                items(visibleTransactions, key = { it.transactionId }) { transaction ->
                     TransactionRow(transaction) { onTransaction(transaction) }
                 }
             }
@@ -458,232 +481,6 @@ private fun HomeScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SmartScanScreen(
-    state: SmartScanState,
-    extractionReview: ValidatedTransactionExtraction?,
-    extractionStatus: String?,
-    onProcess: () -> Unit,
-    onRetry: () -> Unit,
-    onBack: () -> Unit,
-    onManualEntry: (ValidatedTransactionExtraction?) -> Unit,
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Smart Scan") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Kembali") } },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            when (state) {
-                SmartScanState.Idle -> item { Text("Tidak ada gambar yang dipilih.") }
-                is SmartScanState.Ready -> {
-                    item {
-                        LaunchedEffect(state.request) { onProcess() }
-                        Text("Menyiapkan gambar…")
-                    }
-                }
-                is SmartScanState.Processing -> item {
-                    Column(
-                        Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        CircularProgressIndicator()
-                        Text("Membaca teks secara lokal…")
-                        Text(scanSourceLabel(state.request.source), style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = onBack) { Text("Batalkan") }
-                    }
-                }
-                is SmartScanState.Failed -> {
-                    item { Text("OCR gagal", style = MaterialTheme.typography.headlineSmall) }
-                    item { Text(state.message, color = MaterialTheme.colorScheme.error) }
-                    item {
-                        Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Coba lagi") }
-                    }
-                    item {
-                        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Buang gambar") }
-                    }
-                }
-                is SmartScanState.Complete -> {
-                    val output = state.output
-                    item {
-                        Text("Teks berhasil dibaca", style = MaterialTheme.typography.headlineSmall)
-                        Text(
-                            "${output.image.originalWidth}×${output.image.originalHeight} → " +
-                                "${output.image.processedWidth}×${output.image.processedHeight} · " +
-                                "OCR ${output.ocr.recognitionMillis} ms",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    output.warnings.forEach { warning ->
-                        item { Text(warning, color = MaterialTheme.colorScheme.error) }
-                    }
-                    item {
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Hasil OCR", style = MaterialTheme.typography.titleMedium)
-                                SelectionContainer {
-                                    Text(output.ocr.text.ifBlank { "Tidak ada teks yang terbaca." })
-                                }
-                            }
-                        }
-                    }
-                    item { ExtractionReviewCard(extractionReview, extractionStatus) }
-                    item {
-                        Button(onClick = { onManualEntry(extractionReview) }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Isi transaksi manual")
-                        }
-                    }
-                    item {
-                        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Buang hasil") }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExtractionReviewCard(
-    review: ValidatedTransactionExtraction?,
-    extractionStatus: String?,
-) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Draft transaksi", style = MaterialTheme.typography.titleMedium)
-            if (review == null) {
-                Text("Menyiapkan validasi draft…")
-                return@Column
-            }
-            val extraction = review.extraction
-            extractionStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            review.issues
-                .filter {
-                    it.field == ExtractionFieldName.SCHEMA ||
-                        it.field == ExtractionFieldName.MASTER_DATA
-                }
-                .forEach { issue ->
-                    Text(
-                        issue.message,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            ExtractionFieldRow(
-                label = "Tanggal",
-                field = extraction.date,
-                display = extraction.date.value,
-                fieldName = ExtractionFieldName.DATE,
-                review = review,
-            )
-            ExtractionFieldRow(
-                label = "Jumlah",
-                field = extraction.amountIdr,
-                display = extraction.amountIdr.value?.let(::formatIdr),
-                fieldName = ExtractionFieldName.AMOUNT_IDR,
-                review = review,
-                alternativeDisplay = ::formatIdr,
-            )
-            ExtractionFieldRow(
-                label = "Tipe",
-                field = extraction.transactionType,
-                display = extraction.transactionType.value,
-                fieldName = ExtractionFieldName.TRANSACTION_TYPE,
-                review = review,
-            )
-            ExtractionFieldRow(
-                label = "Pembayaran",
-                field = extraction.paymentMethod,
-                display = extraction.paymentMethod.value,
-                fieldName = ExtractionFieldName.PAYMENT_METHOD,
-                review = review,
-            )
-            ExtractionFieldRow(
-                label = "Kategori",
-                field = extraction.category,
-                display = extraction.category.value,
-                fieldName = ExtractionFieldName.CATEGORY,
-                review = review,
-            )
-            extraction.merchant.value?.let {
-                ExtractionFieldRow(
-                    label = "Merchant",
-                    field = extraction.merchant,
-                    display = it,
-                    fieldName = ExtractionFieldName.MERCHANT,
-                    review = review,
-                )
-            }
-            extraction.description.value?.let {
-                ExtractionFieldRow(
-                    label = "Keterangan",
-                    field = extraction.description,
-                    display = it,
-                    fieldName = ExtractionFieldName.DESCRIPTION,
-                    review = review,
-                )
-            }
-            extraction.warnings.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
-        }
-    }
-}
-
-@Composable
-private fun <T> ExtractionFieldRow(
-    label: String,
-    field: ExtractedField<T>,
-    display: String?,
-    fieldName: ExtractionFieldName,
-    review: ValidatedTransactionExtraction,
-    alternativeDisplay: (T) -> String = { it.toString() },
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("$label: ${display ?: "belum tersedia"}")
-            confidenceLabel(field.confidence)?.let { labelText ->
-                Text(
-                    labelText,
-                    color = when (field.confidence) {
-                        ExtractionConfidence.MEDIUM -> MaterialTheme.colorScheme.tertiary
-                        ExtractionConfidence.LOW, ExtractionConfidence.MISSING -> MaterialTheme.colorScheme.error
-                        ExtractionConfidence.HIGH -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                )
-            }
-        }
-        field.evidence?.let { Text("Bukti: $it", style = MaterialTheme.typography.bodySmall) }
-        if (field.alternatives.isNotEmpty()) {
-            Text(
-                "Alternatif: ${field.alternatives.joinToString { alternativeDisplay(it) }}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        review.issues.filter { it.field == fieldName }.forEach { issue ->
-            Text(issue.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-private fun confidenceLabel(confidence: ExtractionConfidence): String? = when (confidence) {
-    ExtractionConfidence.HIGH -> null
-    ExtractionConfidence.MEDIUM -> "Periksa"
-    ExtractionConfidence.LOW -> "Keyakinan rendah"
-    ExtractionConfidence.MISSING -> "Wajib diisi"
-}
-
-private fun scanSourceLabel(source: ScanImageSource): String = when (source) {
-    ScanImageSource.SHARE -> "Sumber: dibagikan ke Lajur"
-    ScanImageSource.GALLERY -> "Sumber: galeri"
-    ScanImageSource.CAMERA -> "Sumber: kamera"
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -696,6 +493,7 @@ private fun SettingsScreen(
     onTimeout: (Long) -> Unit,
     onScreenProtection: (Boolean) -> Unit,
     onLockNow: () -> Unit,
+    onData: () -> Unit,
 ) {
     var enableError by remember { mutableStateOf<String?>(null) }
     val timeoutChoices = listOf(
@@ -717,6 +515,11 @@ private fun SettingsScreen(
             Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            item {
+                Text("Data", style = MaterialTheme.typography.headlineSmall)
+                OutlinedButton(onClick = onData, modifier = Modifier.fillMaxWidth()) { Text("Data / Workbook") }
+                Text("Impor, ekspor, buat workbook tahunan, dan status perubahan lokal.")
+            }
             item { Text("Keamanan", style = MaterialTheme.typography.headlineSmall) }
             item {
                 Row(
@@ -806,11 +609,14 @@ private fun SettingsScreen(
 
 @Composable
 private fun TransactionRow(transaction: LocalTransaction, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Card(Modifier.fillMaxWidth().testTag("transaction-${transaction.transactionId}").clickable(onClick = onClick)) {
         Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(transaction.draft.category, style = MaterialTheme.typography.titleMedium)
-                Text("${transaction.draft.date} · ${transaction.draft.paymentMethod}")
+                Text("${transaction.draft.date} · ${transaction.draft.paymentMethod.ifBlank { "Pembayaran belum diisi" }}")
+                val missing = missingTransactionFields(transaction.draft)
+                if (missing.any { it != "Pembayaran" }) Text("Periksa: " + missing.joinToString(),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                 transaction.draft.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -821,94 +627,6 @@ private fun TransactionRow(transaction: LocalTransaction, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TransactionEditor(
-    transaction: LocalTransaction?,
-    initialExtraction: ValidatedTransactionExtraction?,
-    master: MasterData?,
-    onBack: () -> Unit,
-    onSave: (TransactionDraft) -> Unit,
-) {
-    val extracted = initialExtraction?.extraction
-    val editorKey = transaction?.transactionId ?: extracted?.hashCode()
-    var date by rememberSaveable(editorKey) {
-        mutableStateOf(transaction?.draft?.date ?: extracted?.date?.value ?: LocalDate.now().toString())
-    }
-    var type by rememberSaveable(editorKey) {
-        mutableStateOf(transaction?.draft?.type ?: extracted?.transactionType?.value ?: "Pengeluaran")
-    }
-    var payment by rememberSaveable(editorKey) {
-        mutableStateOf(transaction?.draft?.paymentMethod ?: extracted?.paymentMethod?.value ?: "")
-    }
-    var category by rememberSaveable(editorKey) {
-        mutableStateOf(transaction?.draft?.category ?: extracted?.category?.value ?: "")
-    }
-    var amount by rememberSaveable(editorKey) {
-        mutableStateOf(transaction?.draft?.amountIdr?.toString() ?: extracted?.amountIdr?.value?.toString() ?: "")
-    }
-    var description by rememberSaveable(editorKey) {
-        mutableStateOf(transaction?.draft?.description ?: extracted?.description?.value ?: "")
-    }
-    val categories = master?.categories?.filter { it.kind == type }?.map { it.name }.orEmpty()
-    val validDate = runCatching { LocalDate.parse(date) }.isSuccess
-    val staysInWorkbook = transaction?.revision == null || date.take(4) == transaction.draft.date.take(4)
-    val valid = validDate && staysInWorkbook && payment.isNotBlank() && category.isNotBlank() && (amount.toLongOrNull() ?: 0) > 0
-
-    Scaffold(topBar = { TopAppBar(title = { Text(if (transaction == null) "Transaksi baru" else "Edit transaksi") }, navigationIcon = { TextButton(onClick = onBack) { Text("Kembali") } }) }) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (initialExtraction != null) {
-                item {
-                    Text(
-                        "Periksa semua nilai hasil Smart Scan sebelum menyimpan.",
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
-            }
-            item { OutlinedTextField(date, { date = it }, label = { Text("Tanggal (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth()) }
-            item { SelectionField("Tipe", type, master?.transactionTypes.orEmpty()) { type = it; category = "" } }
-            item { SelectionField("Pembayaran", payment, master?.paymentMethods.orEmpty()) { payment = it } }
-            item { SelectionField("Kategori", category, categories) { category = it } }
-            item {
-                OutlinedTextField(
-                    amount,
-                    { amount = it.filter(Char::isDigit) },
-                    label = { Text("Jumlah (Rp)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            item { OutlinedTextField(description, { description = it }, label = { Text("Keterangan (opsional)") }, modifier = Modifier.fillMaxWidth()) }
-            if (!staysInWorkbook) item { Text("Edit tidak dapat memindahkan transaksi ke tahun lain.", color = MaterialTheme.colorScheme.error) }
-            item {
-                Button(
-                    onClick = { onSave(TransactionDraft(date, type, payment, category, amount.toLong(), description.ifBlank { null })) },
-                    enabled = valid && master != null,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Simpan") }
-            }
-            if (master == null) item { Text("Master belum tersedia. Hubungkan internet dan tekan Refresh.") }
-        }
-    }
-}
-
-@Composable
-private fun SelectionField(label: String, value: String, choices: List<String>, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("$label: ${value.ifBlank { "Pilih" }}")
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            choices.forEach { choice ->
-                DropdownMenuItem(text = { Text(choice) }, onClick = { onSelect(choice); expanded = false })
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -924,7 +642,7 @@ private fun TransactionDetail(
             Text(formatIdr(transaction.draft.amountIdr), style = MaterialTheme.typography.headlineLarge)
             Text(transaction.draft.date)
             Text("${transaction.draft.type} · ${transaction.draft.category}")
-            Text("Pembayaran: ${transaction.draft.paymentMethod}")
+            Text("Pembayaran: ${transaction.draft.paymentMethod.ifBlank { "Belum diisi (opsional)" }}")
             transaction.draft.description?.let { Text(it) }
             Text("Status: ${transaction.syncState.name}")
             transaction.lastSyncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -942,5 +660,5 @@ private fun TransactionDetail(
     )
 }
 
-private fun formatIdr(value: Long): String =
+internal fun formatIdr(value: Long): String =
     NumberFormat.getCurrencyInstance(Locale.forLanguageTag("id-ID")).format(value).replace(",00", "")

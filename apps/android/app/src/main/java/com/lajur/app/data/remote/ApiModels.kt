@@ -89,3 +89,17 @@ data class UpdateTransactionRequest(
 data class ProblemDto(val code: String? = null, val detail: String? = null)
 
 typealias MasterDataDto = MasterData
+
+@Serializable
+data class WorkbookInfoDto(val year: Int, val sizeBytes: Long, val lastModifiedAtUtc: String)
+
+@Serializable
+data class WorkbookImportDto(
+    val year: Int,
+    val fileName: String,
+    val indexedTransactionCount: Int,
+    val updatedTransactionCount: Int,
+    val tombstonedTransactionCount: Int,
+    val replacedExisting: Boolean,
+    val backupFileName: String? = null,
+)

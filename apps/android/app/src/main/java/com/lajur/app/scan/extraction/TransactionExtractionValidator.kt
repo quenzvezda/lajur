@@ -34,7 +34,7 @@ class TransactionExtractionValidator {
             issues,
         )
         val paymentMethod = validateMasterChoice(
-            input.paymentMethod,
+            input.paymentMethod.copy(value = input.paymentMethod.value?.takeIf(String::isNotBlank)),
             master?.paymentMethods.orEmpty(),
             ExtractionFieldName.PAYMENT_METHOD,
             "Metode pembayaran tidak tersedia di Master.",
@@ -70,12 +70,6 @@ class TransactionExtractionValidator {
             transactionType.value,
             ExtractionFieldName.TRANSACTION_TYPE,
             "Tipe transaksi wajib diperiksa.",
-            issues,
-        )
-        addMissingRequired(
-            paymentMethod.value,
-            ExtractionFieldName.PAYMENT_METHOD,
-            "Metode pembayaran wajib diperiksa.",
             issues,
         )
         addMissingRequired(category.value, ExtractionFieldName.CATEGORY, "Kategori wajib diperiksa.", issues)

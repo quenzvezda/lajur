@@ -29,6 +29,7 @@ Launch/Auth Gate
 Home transaction tap → Transaction Detail → Edit / Delete
 
 Home settings icon → Settings
+Settings → Data / Workbook → list/create/import/export
 ```
 
 A later design may introduce bottom navigation only if additional primary destinations justify it.
@@ -95,6 +96,25 @@ Rp 40.000     Transport · Bank
 
 Keep dashboard information intentionally light. The workbook remains the rich reporting surface.
 
+When cached non-deleted rows in the selected month have empty payment (or another
+missing/invalid required field), show **Perlu dilengkapi** with a transaction
+count and **Lihat transaksi**. This count is independent of text search, not an
+account-wide/server completeness claim. The action clears search and filters
+the list; **Lihat semua transaksi** removes the review filter. No blocking modal,
+unpaid status, or change to financial totals. Filling payment later is an edit
+to the original row. A blank method reads **Pembayaran belum diisi** on the list.
+
+## 4a. Data / Workbook
+
+The Settings entry lists server workbook years, sizes and last-modified time.
+Create uses an explicit year and never replaces an existing workbook. Import
+uses the system document picker, displays the selected file, requests its year,
+and separates replacement opt-in from the final confirmation. Pending/failed
+operations disable import; no hidden discard/merge is permitted. Export one
+XLSM/all-years ZIP uses the system Save As picker and warns that pending local
+changes are not included. Progress and errors stay visible on the Data screen.
+After import, Home selects the imported year and reloads canonical data.
+
 ## 5. Manual Add
 
 Interaction optimization:
@@ -102,9 +122,23 @@ Interaction optimization:
 1. Amount should be easy to reach and use numeric input.
 2. Default date = today.
 3. Default type = `Pengeluaran`.
-4. Payment method can remember the previously used method.
+4. Payment method is optional and can be filled later on the same transaction.
 5. Category is explicit.
 6. Description is optional.
+
+Current editor: amount appears first, accepts whole-IDR digits, and displays
+thousands separators without changing the stored integer. Date opens a calendar.
+Short type/payment menus match the field width. Category opens a searchable,
+scrollable bottom sheet showing only Master categories for the selected type;
+changing type clears the category. Missing required fields prevent save and
+are summarized near the save action. Remembering the last payment remains a
+future preference, not a currently implemented default.
+
+Payment is labeled **Pembayaran (opsional)** with **Opsional. Bisa diisi nanti.**
+and a **Kosongkan pembayaran** choice. Only date, type, category and positive
+integer amount are required. An explicitly chosen method still must be a Master
+value. The same optionality applies to scan review; missing payment is neutral,
+not a red required-field warning. Save continues to require human review.
 
 Save behavior:
 
@@ -130,11 +164,21 @@ The user should see a single meaningful state such as:
 
 `Analyzing transaction…`
 
-OCR and lazy LLM initialization may happen concurrently. Do not expose internal pipeline steps unless useful for diagnostics.
+Selecting an image runs only local OCR/evidence rules. It does not initialize a
+model. A validated draft appears as soon as OCR finishes. The optional
+**Tambahkan saran AI** action starts local semantic suggestions explicitly.
+The user can cancel AI or continue into the editor without waiting. Entering
+the editor invalidates late AI results so they cannot overwrite user corrections.
 
 ### Draft UI
 
-High-confidence values appear normally.
+Show the draft first. Raw OCR, dimensions, timings, and debug report saving live
+under **Lihat teks struk & detail**, collapsed by default.
+
+Supported values show their source: **Terbaca dari struk** or **Saran AI · periksa**.
+Lower-confidence evidence is marked **Hasil baca perlu diperiksa**; these labels
+are review hints, not calibrated accuracy scores. Evidence and alternatives
+expand per field without a narrow right-hand label column.
 
 Low/ambiguous values should be visually marked, e.g.:
 
@@ -164,6 +208,10 @@ Kategori *
 ```
 
 Save is disabled until required fields are valid.
+
+**Periksa & lengkapi transaksi** opens the ordinary editor with validated partial
+values. A missing scan date or type remains empty; manual-entry defaults do not
+silently stand in for extraction. Missing category must be selected explicitly.
 
 ### Important
 

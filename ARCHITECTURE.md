@@ -10,7 +10,7 @@
 │      │                    │                            │
 │      │             Local OCR                           │
 │      │                    │                            │
-│      │             Local LLM                           │
+│      │        Evidence rules + Local LLM                │
 │      │                    │                            │
 │      └─────────────► Draft / Review ◄──────────────────┘
 │                             │                          │
@@ -53,6 +53,7 @@ Owns:
 - camera/gallery image acquisition;
 - OCR;
 - local LLM inference;
+- evidence-based scan fields with OCR reading order and source tracking;
 - draft validation before submission;
 - retry scheduling.
 

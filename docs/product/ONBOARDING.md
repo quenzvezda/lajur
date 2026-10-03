@@ -51,6 +51,14 @@ Flow:
 
 If any step fails, the active workbook remains unchanged.
 
+Android now exposes this flow in onboarding and Settings → Data / Workbook.
+Choosing a file only stages a bounded private copy (20 MiB maximum); an explicit
+year and confirmation initiate upload. Replacing an existing year additionally
+requires opt-in. Any outstanding outbox operation blocks import. If the network
+response is lost, the server outcome is uncertain; check canonical data before
+retrying. Android invalidates that year's synchronized cache before upload and
+refetches afterward, including after a failed attempt.
+
 ## 4. Importing the supplied 2026 workbook
 
 The initial migration fixture is `Keuangan_Pribadi_2026.xlsm`.

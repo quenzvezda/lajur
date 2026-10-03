@@ -32,6 +32,10 @@ class MlKitOcrEngine : OcrEngine<PreparedBitmap>, AutoCloseable {
                 )
             },
             recognitionMillis = SystemClock.elapsedRealtime() - startedAt,
+            lines = recognized.textBlocks.flatMap { it.lines }.map { line ->
+                val box = line.boundingBox
+                OcrTextBlock(line.text, box?.left, box?.top, box?.right, box?.bottom)
+            },
         )
     }
 

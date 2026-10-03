@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "name": "lajur-synthetic-extraction-v1",
+  "description": "Synthetic OCR-only cases for validating the Phase 8C benchmark harness. No private receipt or workbook data.",
+  "master": {
+    "workbookYear": 2026,
+    "schemaVersion": "1",
+    "transactionTypes": ["Pengeluaran", "Pemasukan"],
+    "paymentMethods": ["Cash", "Debit", "Bank", "BCA", "GoPay", "Shopee Pay"],
+    "categories": [
+      {"name": "Makanan-Jadi", "kind": "Pengeluaran"},
+      {"name": "Jajan", "kind": "Pengeluaran"},
+      {"name": "Transportasi", "kind": "Pengeluaran"},
+      {"name": "Belanja", "kind": "Pengeluaran"},
+      {"name": "Tagihan", "kind": "Pengeluaran"},
+      {"name": "Gaji", "kind": "Pemasukan"},
+      {"name": "Bonus", "kind": "Pemasukan"}
+    ]
+  },
+  "cases": [
+    {
+      "id": "payment-qris-coffee-001",
+      "sourceKind": "payment_success",
+      "ocrText": "PEMBAYARAN BERHASIL\n20 Sep 2026 08:15\nKEDAI KOPI CONTOH\nQRIS\nGoPay\nTotal Bayar Rp28.000\nID Transaksi SYN-001",
+      "expected": {
+        "documentKind": "payment_success",
+        "date": "2026-09-20",
+        "amountIdr": 28000,
+        "transactionType": "Pengeluaran",
+        "paymentMethod": "Bank",
+        "category": "Jajan",
+        "merchant": "KEDAI KOPI CONTOH"
+      }
+    },
+    {
+      "id": "receipt-grocery-cash-002",
+      "sourceKind": "receipt",
+      "ocrText": "TOKO SERBA CONTOH\n19/09/2026 18:42\nBeras 5kg 82.500\nSabun 25.000\nMinyak 50.000\nTOTAL 157.500\nTUNAI 160.000\nKEMBALI 2.500",
+      "expected": {
+        "documentKind": "receipt",
+        "date": "2026-09-19",
+        "amountIdr": 157500,
+        "transactionType": "Pengeluaran",
+        "paymentMethod": "Cash",
+        "category": "Belanja",
+        "merchant": "TOKO SERBA CONTOH"
+      }
+    },
+    {
+      "id": "incoming-transfer-ambiguous-003",
+      "sourceKind": "transfer",
+      "ocrText": "TRANSFER MASUK\nBCA\nTanggal 18 September 2026\nDari REKAN CONTOH\nNominal Rp2.000.000\nBerita: transfer dana",
+      "expected": {
+        "documentKind": "transfer",
+        "date": "2026-09-18",
+        "amountIdr": 2000000,
+        "transactionType": "Pemasukan",
+        "paymentMethod": "BCA",
+        "category": null,
+        "merchant": null
+      }
+    },
+    {
+      "id": "outgoing-transfer-ambiguous-004",
+      "sourceKind": "transfer",
+      "ocrText": "TRANSFER BERHASIL\n17 Sep 2026 14:11\nBCA\nKe PENERIMA CONTOH\nNominal Transfer Rp500.000\nBiaya Admin Rp0\nTotal Rp500.000",
+      "expected": {
+        "documentKind": "transfer",
+        "date": "2026-09-17",
+        "amountIdr": 500000,
+        "transactionType": "Pengeluaran",
+        "paymentMethod": "BCA",
+        "category": null,
+        "merchant": "PENERIMA CONTOH"
+      }
+    },
+    {
+      "id": "wallet-book-store-005",
+      "sourceKind": "payment_success",
+      "ocrText": "Shopee Pay\nPembayaran berhasil\nTOKO BUKU CONTOH\n16-09-2026 20:05\nJumlah Pembayaran Rp85.000\nSaldo setelah transaksi Rp315.250",
+      "expected": {
+        "documentKind": "payment_success",
+        "date": "2026-09-16",
+        "amountIdr": 85000,
+        "transactionType": "Pengeluaran",
+        "paymentMethod": "Shopee Pay",
+        "category": "Belanja",
+        "merchant": "TOKO BUKU CONTOH"
+      }
+    },
+    {
+      "id": "restaurant-debit-total-006",
+      "sourceKind": "receipt",
+      "ocrText": "RESTORAN CONTOH\n15 SEP 2026\nSubtotal 110.000\nPajak 11.000\nService 7.500\nGRAND TOTAL 128.500\nDEBIT 128.500\nTerima kasih",
+      "expected": {
+        "documentKind": "receipt",
+        "date": "2026-09-15",
+        "amountIdr": 128500,
+        "transactionType": "Pengeluaran",
+        "paymentMethod": "Debit",
+        "category": "Makanan-Jadi",
+        "merchant": "RESTORAN CONTOH"
+      }
+    },
+    {
+      "id": "utility-bill-007",
+      "sourceKind": "payment_success",
+      "ocrText": "PEMBAYARAN TAGIHAN BERHASIL\nBCA mobile\nTagihan listrik contoh\nTanggal 14/09/2026\nNominal Rp425.000\nBiaya admin Rp2.500\nTOTAL PEMBAYARAN Rp427.500",
+      "expected": {
+        "documentKind": "payment_success",
+        "date": "2026-09-14",
+        "amountIdr": 427500,
+        "transactionType": "Pengeluaran",
+        "paymentMethod": "BCA",
+        "category": "Tagihan",
+        "merchant": null
+      }
+    },
+    {
+      "id": "transport-balance-decoy-008",
+      "sourceKind": "payment_success",
+      "ocrText": "GoPay\nPerjalanan selesai\n13 September 2026 21:20\nBIAYA PERJALANAN Rp47.500\nPromo Rp5.000\nSaldo GoPay Rp952.500\nPembayaran berhasil",
+      "expected": {
+        "documentKind": "payment_success",
+        "date": "2026-09-13",
+        "amountIdr": 47500,
+        "transactionType": "Pengeluaran",
+        "paymentMethod": "GoPay",
+        "category": "Transportasi",
+        "merchant": null
+      }
+    },
+    {
+      "id": "minimarket-qris-decoys-009",
+      "sourceKind": "receipt",
+      "ocrText": "MINIMARKET NUSANTARA\nPT SUMBER REZEKI SEJAHTERA\n20/09/2026 14:23\nULTRA MILK 2 x 7.500 15.000\nINDOMIE GORENG 5 x 3.200 16.000\nDISKON MEMBER -3.000\nSUBTOTAL 65.000\nPPN 11% 6.820\nTOTAL RP 68.820\nQRIS 68.820\nKEMBALI 0",
+      "expected": {
+        "documentKind": "receipt",
+        "date": "2026-09-20",
+        "amountIdr": 68820,
+        "transactionType": "Pengeluaran",
+        "paymentMethod": "Bank",
+        "category": "Makanan-Jadi",
+        "merchant": "MINIMARKET NUSANTARA"
+      }
+    }
+  ]
+}

@@ -17,22 +17,28 @@ Image preprocessing
   ↓
 OCR (local)
   ↓
-Text (+ optional layout annotations)
+Text + OCR line positions → reconstructed reading order
   ↓
-Local LLM
+Explicit evidence rules
   ↓
 Structured extraction result
   ↓
 Deterministic validator
   ↓
 Editable transaction draft
+  ↓ (optional user action: local LLM suggestions, merge, revalidate)
+Updated review draft
   ↓
 Human review
   ↓
 Local save/outbox
 ```
 
-The LLM is the semantic extractor. Deterministic rules are validation/normalization/fallback helpers, not the main understanding engine.
+Explicit numeric dates and labelled totals use evidence rules. The local LLM
+supplies type/payment/category/merchant/description suggestions only. Dates and
+amounts absent from explicit OCR evidence require manual entry. Supported OCR fields
+survive missing or failed model output; multiple distinct explicit candidates
+stay missing with alternatives even if the model guesses one. See ADR 0007.
 
 ## 3. Lazy lifecycle
 
@@ -44,17 +50,25 @@ The LLM must not load during:
 - manual transaction entry;
 - normal sync.
 
-Load only when Smart Scan requires it.
-
-OCR and LLM loading may run concurrently after an image is selected.
+Load only when the user requests optional AI suggestions on a scan draft.
+Image selection, OCR and rules-only review must not load a model.
 
 Proposed default model idle-unload timeout: 60 seconds, configurable.
 
-Phase 8B implements this lifecycle through a per-scan request/lease. Creating
-the request starts lazy initialization concurrently with OCR. Runtime work is
-serialized, multiple nearby scans reuse one resident engine, and closing the
-last request schedules unload after 60 idle seconds. A native generation error
-immediately unloads the possibly poisoned engine before another scan may retry.
+The lifecycle uses a per-request lease. The explicit AI action starts lazy
+initialization; runtime work is serialized. Nearby
+requests reuse the resident engine; the last released lease schedules a
+60-second idle unload. An abandoned preparation follows the same cleanup.
+Generation failure or cancellation unloads the engine in a non-cancellable
+cleanup block. A fresh-engine experiment was reverted because repeated tests
+also stalled under that policy while POCO was Dozing and its test wake lock
+was disabled. Those timings do not establish a native-runtime or reuse defect;
+repeatable target-device evaluation must keep the device awake.
+
+An in-memory review session retains the rules draft while the optional job runs.
+Cancel, discard, image replacement, and entry into the editor invalidate late
+results. Native synchronous inference may finish before cancellation cleanup;
+the UI must not wait for it or allow it to overwrite the editor.
 
 ## 4. Extraction schema
 
@@ -138,6 +152,10 @@ UI normally hides `high`.
 
 UI highlights low/missing values.
 
+Each field also identifies `ocr_rules`, `local_model`, or unknown source. These
+coarse confidence labels are review hints, not calibrated probabilities. Direct
+primitive model outputs receive low confidence because confidence is absent.
+
 Do not display numeric “confidence percentages” unless a future calibrated model justifies them.
 
 ## 6. Null policy
@@ -157,6 +175,12 @@ BCA
 Amount/payment may be extracted; category should remain null rather than guessed without support.
 
 Required fields must be filled by the user before Save.
+
+Required finance fields are date, type, category and positive whole-IDR amount.
+Payment is optional: a missing/blank extraction value is not a blocking issue,
+and becomes an empty string only when converted to a reviewed transaction draft.
+An unknown nonblank suggestion is still rejected against Master. This policy
+does not change the OCR/evidence algorithm, prompt, runtime or model benchmark.
 
 ## 7. Master-constrained values
 
@@ -214,12 +238,73 @@ extract_transaction(
 
 Parser failures must not crash the app. Invalid output becomes an incomplete draft/fallback state.
 
-Phase 8B bounds OCR prompt input to 24,000 characters and model responses to
-64,000 characters. OCR text is JSON-escaped and explicitly identified as
+The current small-model policy bounds semantic OCR prompt input to 1,600
+characters, the complete prompt to 3,500 characters and model responses to
+64,000 characters. These character guards are not token estimates. Rules always
+inspect the full OCR reading-order text, not the clipped semantic prompt.
+OCR text is JSON-escaped and explicitly identified as
 untrusted data in the prompt. The parser tolerates a surrounding Markdown fence
 but requires an explicit `schemaVersion`; incompatible or malformed output is
 shown as an extraction failure while the raw OCR and manual-entry route remain
 available.
+
+At the untrusted model-output seam, an explicit JSON `null` for one of the
+extracted field objects is normalized to the ordinary missing-field object. This
+preserves the model's safe abstention semantics across small-model variations.
+A direct primitive for one of those fields is wrapped as a low-confidence value;
+its declared Kotlin type must still decode correctly. Unsupported arrays or
+object shapes remain decoding failures, and the validator still owns all format,
+Master, category/type compatibility, and required-field checks.
+
+An unrecognized primitive document-kind label becomes `unknown` with a warning;
+it cannot invalidate otherwise type-compatible fields. Explicit receipt evidence
+can classify the merged draft. Fixed example dates/amounts are excluded from the
+prompt to reduce contamination; actual values come only from the OCR payload.
+
+Before validation, a deterministic normalizer handles narrowly supported receipt
+conventions. Valid `D/M/YYYY` dates become ISO dates. Explicit OCR evidence of
+`QRIS` maps to the canonical `Bank` payment method only when `Bank` exists in the
+workbook Master; otherwise payment is left missing rather than guessed as Cash.
+For receipt documents, exact structural labels `TOTAL`, `SUBTOTAL`, `PPN`, and
+`KEMBALI` are discarded when a small model emits one as the description. These
+rules use source evidence and Master values; they do not silently invent ledger
+data.
+
+Since 2026-10-03, OCR retains line bounding boxes. Lines on the same vertical row
+are joined left-to-right, and rows are sorted top-to-bottom; absent/incomplete
+geometry falls back to raw text. Explicit valid numeric `D/M/YYYY`, `D-M-YYYY`,
+`D.M.YYYY`, ISO dates and Indonesian/English month-name dates (four-digit year)
+are extracted from OCR independently of model output.
+Known expiry/due-date rows are excluded. A unique date is suggested with evidence;
+different dates stay missing with alternatives. A whole-IDR value on the same
+reconstructed row as TOTAL/GRAND TOTAL/total-payment labels is preferred over
+model guesses. When no TOTAL label is present, explicit nominal/transfer,
+payment-amount and trip-cost labels are also supported. Subtotal, tax, balance,
+tender and change are not used as total,
+and an unpaired total label never selects a nearby/largest number. Conflicting
+explicit totals stay missing. The earlier full-schema replay parser still accepts
+legacy numeric suggestions for diagnostics, but live drafts discard model dates
+and amounts. Supported OCR type/payment likewise ignore conflicting suggestions.
+A receipt with SUBTOTAL/TOTAL/KEMBALI can suggest
+Master's Pengeluaran with medium confidence; category remains a semantic/manual
+choice. No merchant/header heuristic is added in this slice.
+
+The rules draft appears immediately after OCR, before any model is requested.
+Local model inference starts only from the optional AI button.
+Missing-model, generation and parse failures retain a validated rules draft.
+An explicit debug-only **Simpan laporan uji (debug)** action stores the latest
+JSON report in `no_backup/scan-diagnostics/latest.json`; it contains raw OCR,
+line positions, reading-order text, Master snapshot, rules, raw/parsed model
+output, validation issues, final fields, model hash and timings, including failed
+parse attempts. Runtime diagnostics include total KV tokens after generation,
+configured context/output limits and whether JSON constraints were enabled;
+they do not claim a native stop reason or separate input/output token counts. Reports omit
+image URIs, account/session data and credentials. Receipt content is not written
+to logcat. See the Phase 8 development runbook for ADB capture and removal.
+
+Rules-only reports have outcome "rules_only" with no model generation or
+inference timings. Normal UI emphasizes source/evidence rather than prominent
+coarse confidence labels. Raw OCR and technical details are collapsed by default.
 
 ## 10. OCR engine
 
@@ -316,6 +401,29 @@ recommends LiteRT-LM over the older MediaPipe LLM Inference API, which is in
 maintenance-only mode. This selects a replaceable runtime adapter, not the
 winning model or backend.
 
+The current development policy explicitly uses a 1,280-token input-plus-output
+context, 256 output tokens and greedy sampling (topK=1, temperature=0, seed=0).
+These conservative limits match the current Qwen artifact and must be revisited
+when another artifact is benchmarked. The compact model transport requests only
+`schemaVersion=1`, `transactionType`, `paymentMethod`, `category`, `merchant`, and
+`description`; nullable strings are converted to the unchanged domain field
+objects with low-confidence model provenance. JSON Schema constrained decoding
+forbids additional properties and bounds string lengths. The prompt requests
+null for known OCR type/payment; live drafts preserve those rules values even
+if the model disagrees. Master vocabulary and category/type compatibility are
+enforced by the ordinary validator, not native grammar enums. An enum-based
+grammar experiment was removed; device Doze confounded the subsequent stalled
+tests, so enum grammar is not established as their cause. Constraints enforce
+shape, not factual correctness; Master and human review remain mandatory.
+Malformed/truncated output is not repaired by inventing missing delimiters or
+values: it retains the OCR draft and a friendly failure message.
+
+Pinned implementation references:
+
+- [LiteRT-LM 0.16 configuration](https://github.com/google-ai-edge/LiteRT-LM/blob/v0.16.0/kotlin/java/com/google/ai/edge/litertlm/Config.kt)
+- [LiteRT-LM 0.16 JSON response format](https://github.com/google-ai-edge/LiteRT-LM/blob/v0.16.0/kotlin/java/com/google/ai/edge/litertlm/ResponseFormat.kt)
+- [Current Qwen artifact's 1280-token KV cache](https://huggingface.co/litert-community/Qwen3-0.6B-int4/blob/main/README.md)
+
 The app looks only for the fixed private file
 `files/models/lajur-extractor.litertlm`. It never scans an untrusted filename,
 bundles a model in the APK, or downloads one from a third-party inference
@@ -327,3 +435,13 @@ References checked for Phase 8B:
 
 - [LiteRT-LM Kotlin API](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/api/kotlin/getting_started.md)
 - [Google AI Edge Android LLM guide](https://developers.google.com/edge/mediapipe/solutions/genai/llm_inference/android)
+
+### Phase 8C evaluation boundary
+
+Model evaluation is an opt-in instrumented workflow, not a launch-time app
+feature or required CI test. A shared evaluator scores structured output,
+validator readiness, exact fields, category coverage/false positives, latency,
+and sampled process PSS. The committed OCR-only dataset is synthetic and exists
+to prove the harness; production selection requires sanitized representative
+data and repeated POCO F6 runs. Candidate facts and the current benchmark order
+are recorded in `docs/reference/LOCAL_MODEL_CANDIDATES.md`.

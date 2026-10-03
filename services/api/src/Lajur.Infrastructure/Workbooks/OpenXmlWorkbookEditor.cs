@@ -613,7 +613,7 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(draft.Type);
-        ArgumentException.ThrowIfNullOrWhiteSpace(draft.PaymentMethod);
+        ArgumentNullException.ThrowIfNull(draft.PaymentMethod);
         ArgumentException.ThrowIfNullOrWhiteSpace(draft.Category);
 
         if (!masterData.TransactionTypes.Contains(draft.Type, StringComparer.Ordinal))
@@ -621,7 +621,8 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
             throw new ArgumentException($"Unknown transaction type '{draft.Type}'.", nameof(draft));
         }
 
-        if (!masterData.PaymentMethods.Contains(draft.PaymentMethod, StringComparer.Ordinal))
+        if (draft.PaymentMethod.Length > 0
+            && !masterData.PaymentMethods.Contains(draft.PaymentMethod, StringComparer.Ordinal))
         {
             throw new ArgumentException($"Unknown payment method '{draft.PaymentMethod}'.", nameof(draft));
         }
@@ -808,7 +809,6 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         if (!double.TryParse(dateText, NumberStyles.Float, CultureInfo.InvariantCulture, out var dateSerial)
             || !long.TryParse(amountText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount)
             || string.IsNullOrWhiteSpace(type)
-            || string.IsNullOrWhiteSpace(payment)
             || string.IsNullOrWhiteSpace(category))
         {
             throw InvalidWorkbook($"Transaction row {row.RowIndex?.Value} is invalid.");
@@ -817,7 +817,7 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         return new WorkbookTransactionDraft(
             DateOnly.FromDateTime(DateTime.FromOADate(dateSerial)),
             type,
-            payment,
+            payment?.Trim() ?? string.Empty,
             category,
             amount,
             string.IsNullOrWhiteSpace(description) ? null : description);

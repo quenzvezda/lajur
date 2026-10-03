@@ -151,6 +151,56 @@ public sealed class OpenXmlWorkbookLifecycleTests
         Assert.Equal("Edited in desktop Excel", after.Description);
     }
 
+    [Fact]
+    public async Task Import_BlankPaymentIsValidAndExternalPaymentEditKeepsIdentity()
+    {
+        using var workspace = new LifecycleWorkspace();
+        var source = Path.Combine(workspace.RootPath, "optional-payment.xlsm");
+        File.Copy(FixturePath, source);
+        WriteText(source, "Jan", "C6", "");
+        var sourceBefore = SHA256.HashData(File.ReadAllBytes(source));
+        var reader = new OpenXmlWorkbookReader();
+        Assert.Equal("", reader.ReadMonthlyTransactions(source, 1)[0].PaymentMethod);
+        var key = new WorkbookKey(Guid.NewGuid(), 2026);
+        var store = new OpenXmlWorkbookStore(workspace.RootPath);
+        var audit = new WorkbookAuditContext(WorkbookChangeSource.ExcelImport, "device", "optional-payment-import");
+        await store.ImportWorkbookAsync(key, source, false, audit);
+        var active = workspace.WorkbookPath(key);
+        var before = reader.ReadApplicationTransactions(active, 2026, 1).First();
+        Assert.Equal("", before.PaymentMethod);
+        Assert.Equal(sourceBefore, SHA256.HashData(File.ReadAllBytes(source)));
+        Assert.Equal(ReadZipEntryHash(source, "xl/vbaProject.bin"), ReadZipEntryHash(active, "xl/vbaProject.bin"));
+        var edited = Path.Combine(workspace.RootPath, "filled-payment.xlsm");
+        File.Copy(active, edited);
+        WriteText(edited, "Jan", "C6", "Bank Uji");
+        var result = await store.ImportWorkbookAsync(key, edited, true, audit);
+        Assert.Equal(1, result.Migration.UpdatedTransactionCount);
+        var after = reader.ReadApplicationTransactions(active, 2026, 1);
+        Assert.Equal(3, after.Count);
+        var sameTransaction = Assert.Single(after, row => row.TransactionId == before.TransactionId);
+        Assert.Equal(before.Revision + 1, sameTransaction.Revision);
+        Assert.Equal("Bank Uji", sameTransaction.PaymentMethod);
+        Assert.Equal(before.AmountIdr, sameTransaction.AmountIdr);
+    }
+
+    [Theory]
+    [InlineData("A6")]
+    [InlineData("B6")]
+    [InlineData("D6")]
+    [InlineData("E6")]
+    public async Task Import_StillRejectsOtherMissingRequiredFields(string reference)
+    {
+        using var workspace = new LifecycleWorkspace();
+        var source = Path.Combine(workspace.RootPath, "invalid-row.xlsm");
+        File.Copy(FixturePath, source);
+        WriteText(source, "Jan", reference, "");
+        var key = new WorkbookKey(Guid.NewGuid(), 2026);
+        var store = new OpenXmlWorkbookStore(workspace.RootPath);
+        await Assert.ThrowsAsync<WorkbookImportValidationException>(() => store.ImportWorkbookAsync(
+            key, source, false, new WorkbookAuditContext(WorkbookChangeSource.ExcelImport, null, "required-field")));
+        Assert.False(File.Exists(workspace.WorkbookPath(key)));
+    }
+
     private static byte[] ReadZipEntryHash(string workbookPath, string entryName)
     {
         using var stream = File.OpenRead(workbookPath);
@@ -191,18 +241,20 @@ public sealed class OpenXmlWorkbookLifecycleTests
     }
 
     private static void WriteDescription(string path, string sheetName, uint rowNumber, string description)
+        => WriteText(path, sheetName, $"F{rowNumber}", description);
+
+    private static void WriteText(string path, string sheetName, string reference, string value)
     {
         using var document = SpreadsheetDocument.Open(path, true);
         var workbookPart = document.WorkbookPart!;
         var sheet = workbookPart.Workbook!.Sheets!.Elements<Sheet>()
             .Single(candidate => candidate.Name?.Value == sheetName);
         var worksheetPart = (WorksheetPart)workbookPart.GetPartById(sheet.Id!.Value!);
-        var row = worksheetPart.Worksheet!.GetFirstChild<SheetData>()!.Elements<Row>()
-            .Single(candidate => candidate.RowIndex?.Value == rowNumber);
-        var cell = row.Elements<Cell>().Single(candidate => candidate.CellReference?.Value == $"F{rowNumber}");
+        var cell = worksheetPart.Worksheet!.Descendants<Cell>()
+            .Single(candidate => candidate.CellReference?.Value == reference);
         cell.CellValue = null;
         cell.DataType = CellValues.InlineString;
-        cell.InlineString = new InlineString(new Text(description));
+        cell.InlineString = new InlineString(new Text(value));
         worksheetPart.Worksheet.Save();
     }
 

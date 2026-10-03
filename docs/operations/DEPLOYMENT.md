@@ -129,3 +129,29 @@ A rollback mechanism should be available by redeploying the prior image tag. Dat
 Use sanitized workbook fixtures in repository tests.
 
 Do not use the owner's real financial workbook as a committed test fixture.
+
+## 10. Agent-assisted first bootstrap and routine releases
+
+The recommended first deployment is a supervised, one-time bootstrap. The agent
+prepares a reviewable host configuration and executes it through temporary SSH
+access after the owner grants that access. Inspect the host first, keep the
+owner's emergency access available, verify the new service and TLS, then revoke
+the temporary bootstrap key. An MCP SSH tool can provide the interface, but
+server-side SSH and Linux permissions determine its actual authority.
+
+Routine deployment should use a separate CI key restricted on the VPS to a
+root-owned Lajur deploy operation. It should accept only a validated image
+digest, update only the API service, check health, and support rollback. Do not
+give the deploy identity unrestricted shell, sudo, or Docker daemon access;
+membership in the `docker` group grants root-level privileges. Keep the
+production Compose configuration distinct from the current local `build:`
+configuration, which uses `lajur-api:local`.
+
+The proposed CI sequence is: test on merge to `main`, build and push an image
+to the chosen registry, invoke the restricted deploy operation with its digest,
+then check readiness. Ordinary image releases should require no interactive
+VPS session. Host administration, secret rotation, recovery, and explicit
+workbook migrations remain separate operations.
+
+See [the VPS agent access research](../reference/VPS_AGENT_DEPLOYMENT_RESEARCH.md)
+for the security reasoning, implementation options, and source references.

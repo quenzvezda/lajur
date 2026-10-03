@@ -160,6 +160,12 @@ Request:
 
 Semantics:
 
+- For create and update, `paymentMethod` is optional: omitted, JSON `null`,
+  empty or whitespace-only input is normalized to `""`. Responses always use
+  a string (empty when unspecified); nonblank values must match Master.
+  Date, type, category and positive whole-IDR amount remain required.
+  Filling/clearing payment edits the original transaction and does not change
+  expense totals or create a settlement record.
 - first successful create → revision 1;
 - retry of identical `transactionId` + equivalent content → return existing transaction successfully;
 - same ID with conflicting content → `409 Conflict`.

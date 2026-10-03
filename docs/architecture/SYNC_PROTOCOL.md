@@ -152,3 +152,12 @@ After import:
 - pending unsynchronized operations require explicit safe handling.
 
 Recommended v1 behavior: reject/disable workbook replacement import while the current device reports unsynchronized outbox operations, or require the user to sync/discard them first.
+
+Current Android menu enforces an empty **actual outbox** (including failed/delete
+operations) under a gate shared with remote sync/pull and local mutation. It never
+discards pending work. The selected year's synchronized rows/Master are invalidated
+before upload and refreshed afterward; this also covers an ambiguous committed
+import with a lost response. A failed import may temporarily remove that year's
+local canonical cache until refetch. The current backend transport does not expose
+a workbook-generation identifier, so the version-based check above remains a
+future reconciliation enhancement, not a currently implemented guarantee.

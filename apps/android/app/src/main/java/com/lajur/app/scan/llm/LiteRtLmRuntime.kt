@@ -3,10 +3,17 @@ package com.lajur.app.scan.llm
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.ResponseFormat
+import com.google.ai.edge.litertlm.SamplerConfig
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+// Conservative policy for the current Qwen artifact's 1280-token KV cache.
+private const val MAX_CONTEXT_TOKENS = 1_280
+private const val MAX_OUTPUT_TOKENS = 256
 
 class LiteRtLmRuntime(
     private val modelFile: File,
@@ -27,6 +34,7 @@ class LiteRtLmRuntime(
             EngineConfig(
                 modelPath = modelFile.absolutePath,
                 backend = Backend.CPU(),
+                maxNumTokens = MAX_CONTEXT_TOKENS,
                 cacheDir = cacheDirectory.absolutePath,
             ),
         )
@@ -39,10 +47,23 @@ class LiteRtLmRuntime(
         }
     }
 
-    override suspend fun generate(prompt: String): String = withContext(dispatcher) {
+    override suspend fun generate(request: LocalModelRequest): LocalModelResponse = withContext(dispatcher) {
         val current = checkNotNull(engine) { "Model lokal belum dimuat." }
-        current.createConversation().use { conversation ->
-            conversation.sendMessage(prompt).toString()
+        current.createConversation(ConversationConfig(
+            samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0, seed = 0),
+            maxOutputToken = MAX_OUTPUT_TOKENS,
+            enableResponseFormat = request.responseSchema != null,
+        )).use { conversation ->
+            val response = conversation.sendMessage(
+                request.prompt,
+                responseFormat = request.responseSchema?.let(ResponseFormat::json),
+            ).toString()
+            LocalModelResponse(response, LocalModelGenerationMetrics(
+                totalTokens = runCatching { conversation.getTokenCount() }.getOrNull(),
+                maxContextTokens = MAX_CONTEXT_TOKENS,
+                maxOutputTokens = MAX_OUTPUT_TOKENS,
+                constrainedJson = request.responseSchema != null,
+            ))
         }
     }
 

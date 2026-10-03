@@ -105,24 +105,24 @@ public sealed record CreateTransactionRequest(
     Guid TransactionId,
     DateOnly Date,
     [param: Required, StringLength(100)] string Type,
-    [param: Required, StringLength(100)] string PaymentMethod,
+    [param: StringLength(100)] string? PaymentMethod,
     [param: Required, StringLength(100)] string Category,
     [param: Range(1, long.MaxValue)] long AmountIdr,
     [param: StringLength(500)] string? Description)
 {
     public FinanceTransactionDraft ToDraft() =>
-        new(Date, Type, PaymentMethod, Category, AmountIdr, Description);
+        new(Date, Type, PaymentMethod?.Trim() ?? string.Empty, Category, AmountIdr, Description);
 }
 
 public sealed record UpdateTransactionRequest(
     [param: Range(1, int.MaxValue)] int ExpectedRevision,
     DateOnly Date,
     [param: Required, StringLength(100)] string Type,
-    [param: Required, StringLength(100)] string PaymentMethod,
+    [param: StringLength(100)] string? PaymentMethod,
     [param: Required, StringLength(100)] string Category,
     [param: Range(1, long.MaxValue)] long AmountIdr,
     [param: StringLength(500)] string? Description)
 {
     public FinanceTransactionDraft ToDraft() =>
-        new(Date, Type, PaymentMethod, Category, AmountIdr, Description);
+        new(Date, Type, PaymentMethod?.Trim() ?? string.Empty, Category, AmountIdr, Description);
 }
