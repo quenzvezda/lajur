@@ -2,10 +2,14 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Lajur.Application.Auth;
 using Lajur.Application.Finance;
 using Lajur.Application.Workbooks;
+using Lajur.Infrastructure.Workbooks;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Lajur.IntegrationTests;
@@ -87,6 +91,60 @@ public sealed class WorkbookEndpointsTests
         var entry = Assert.Single(archive.Entries);
         Assert.Equal("Keuangan_Pribadi_2026.xlsm", entry.FullName);
         Assert.True(entry.Length > 0);
+    }
+
+    [Fact]
+    public async Task Relative_date_helpers_work_through_create_import_export_and_invalid_replacement_guard()
+    {
+        using var factory = new LajurApiFactory();
+        _ = await CreateAccountAsync(factory, "workbook-relative", Password);
+        SeedTemplate(factory);
+        var templatePath = Path.Combine(factory.StorageRoot, "templates", "finance-template.xlsm");
+        WriteRelativeDateHelpers(templatePath);
+        var templateBefore = SHA256.HashData(await File.ReadAllBytesAsync(templatePath));
+        using var client = await CreateAuthenticatedClientAsync(factory, "workbook-relative", Password);
+
+        using var create = await client.PostAsync("/api/v1/workbooks/2028/create", content: null);
+        create.EnsureSuccessStatusCode();
+        using var exportGenerated = await client.GetAsync("/api/v1/workbooks/2028/export");
+        exportGenerated.EnsureSuccessStatusCode();
+        var generatedPath = Path.Combine(factory.StorageRoot, "generated-export.xlsm");
+        await File.WriteAllBytesAsync(generatedPath, await exportGenerated.Content.ReadAsByteArrayAsync());
+        Assert.Equal(2028, new OpenXmlWorkbookReader().DetectWorkbookYear(generatedPath));
+        Assert.Equal(templateBefore, SHA256.HashData(await File.ReadAllBytesAsync(templatePath)));
+        Assert.Equal(ReadVbaHash(templatePath), ReadVbaHash(generatedPath));
+
+        using var import = await ImportAsync(client, templatePath, confirmedYear: null,
+            replaceExisting: false, confirmNoPendingChanges: true);
+        import.EnsureSuccessStatusCode();
+        var result = await import.Content.ReadFromJsonAsync<WorkbookImportResult>();
+        Assert.NotNull(result);
+        Assert.Equal(2026, result.Year);
+        Assert.Equal(8, result.IndexedTransactionCount);
+        using var exportImported = await client.GetAsync("/api/v1/workbooks/2026/export");
+        exportImported.EnsureSuccessStatusCode();
+        var canonicalBefore = await exportImported.Content.ReadAsByteArrayAsync();
+        var importedPath = Path.Combine(factory.StorageRoot, "imported-export.xlsm");
+        await File.WriteAllBytesAsync(importedPath, canonicalBefore);
+        Assert.Equal(2026, new OpenXmlWorkbookReader().DetectWorkbookYear(importedPath));
+        Assert.Equal(ReadVbaHash(templatePath), ReadVbaHash(importedPath));
+
+        using (var document = SpreadsheetDocument.Open(templatePath, true))
+        {
+            var workbook = document.WorkbookPart!;
+            var sheet = workbook.Workbook!.Sheets!.Elements<Sheet>().Single(sheet => sheet.Name?.Value == "Okt");
+            var worksheet = ((WorksheetPart)workbook.GetPartById(sheet.Id!.Value!)).Worksheet!;
+            worksheet.Descendants<Cell>().Single(cell => cell.CellReference?.Value == "AG32")
+                .CellFormula!.Text = "$AD$1+AF31-1";
+            worksheet.Save();
+        }
+        using var invalid = await ImportAsync(client, templatePath, 2026,
+            replaceExisting: true, confirmNoPendingChanges: true);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, invalid.StatusCode);
+        Assert.Equal("workbook_validation_failed", await ReadProblemCodeAsync(invalid));
+        using var exportAfter = await client.GetAsync("/api/v1/workbooks/2026/export");
+        exportAfter.EnsureSuccessStatusCode();
+        Assert.Equal(canonicalBefore, await exportAfter.Content.ReadAsByteArrayAsync());
     }
 
     [Fact]
@@ -205,6 +263,30 @@ public sealed class WorkbookEndpointsTests
         var path = Path.Combine(factory.StorageRoot, "templates", "finance-template.xlsm");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.Copy(FixturePath, path);
+    }
+
+    private static void WriteRelativeDateHelpers(string path)
+    {
+        using var document = SpreadsheetDocument.Open(path, true);
+        var workbook = document.WorkbookPart!;
+        foreach (var sheetName in new[] { "Okt", "Nov", "Des" })
+        {
+            var sheet = workbook.Workbook!.Sheets!.Elements<Sheet>().Single(sheet => sheet.Name?.Value == sheetName);
+            var worksheet = ((WorksheetPart)workbook.GetPartById(sheet.Id!.Value!)).Worksheet!;
+            for (var row = 2; row <= 32; row++)
+            {
+                worksheet.Descendants<Cell>().Single(cell => cell.CellReference?.Value == $"AG{row}")
+                    .CellFormula = new CellFormula($"$AD$1+AF{row}-1");
+            }
+            worksheet.Save();
+        }
+    }
+
+    private static byte[] ReadVbaHash(string path)
+    {
+        using var archive = ZipFile.OpenRead(path);
+        using var vba = archive.GetEntry("xl/vbaProject.bin")!.Open();
+        return SHA256.HashData(vba);
     }
 
     private static string SeedWorkbook(LajurApiFactory factory, Guid userId, int year)

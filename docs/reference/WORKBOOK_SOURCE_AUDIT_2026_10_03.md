@@ -2,10 +2,15 @@
 
 ## Conclusion
 
-The owner's new private source retains the main workbook layout, but it is **not
-an immediately deployable replacement for the production template or an
-import-ready workbook**. Changes include Master configuration, date-helper
+At audit time the owner's new private source retained the main workbook layout,
+but was **not an immediately deployable replacement for the production template
+or an import-ready workbook**. Changes include Master configuration, date-helper
 formula variants and VBA package bytes, not just button styling.
+
+Follow-up on 2026-10-04: backend date-helper support below has been implemented
+and tested on sanitized copies, alongside the earlier optional-payment support.
+The private source has not been reimported or promoted; remaining category,
+analytics, cleaning and native acceptance decisions still apply.
 
 Recommended sequence: finish remaining backend compatibility, resolve category
 decisions, then generate a separate clean
@@ -118,11 +123,12 @@ tests cover these changes; the private source has not been reimported or promote
 The separate historical category decision remains open. The probe did not call
 an import API or initialize metadata.
 
-### 2. Year validation/generation needs a compatible helper variant
+### 2. Year validation/generation helper variant — implementation follow-up
 
-`OpenXmlWorkbookReader.DetectWorkbookYear` requires a recognizable direct DATE
-formula at both AD1 and AG2. `OpenXmlWorkbookEditor.PatchDateFormula` likewise
-expects DATE at AG2 during year generation. The new AD1-relative AG2 formula in
+At audit time, `OpenXmlWorkbookReader.DetectWorkbookYear` required a recognizable
+direct DATE formula at both AD1 and AG2. The generator's former
+`OpenXmlWorkbookEditor.PatchDateFormula` likewise expected DATE at AG2.
+The new AD1-relative AG2 formula in
 Okt–Des fails those implementation expectations even though it can be valid
 Excel logic. This second blocker is established from exact formula/code
 inspection; the original public year-read probe encountered payment blanks first.
@@ -134,6 +140,18 @@ generating a new year. Retain old-template support and reject unrelated formulas
 Add sanitized import/generation/preservation regressions, including the final
 day of short months and leap years. Do not weaken validation to arbitrary
 formula evaluation or silently rewrite the owner's business logic.
+
+Implementation follow-up (2026-10-04): a shared bounded recognizer now validates
+AD1's first-day year/month and all AG2:AG32 direct/relative helpers, including
+local shared groups. Generation changes direct year tokens, preserves relative
+formulas/shared attributes, clears stale helper caches and requests native Excel
+recalculation. Unknown/wrong references, offsets, months/years and broken shared
+groups remain rejected before promotion. Sanitized tests cover legacy and mixed
+forms, February 2027/2028, other month ends, import/export/generation and rollback.
+They also detected and prevented generation/import auto-saving unchanged shared
+strings. This resolves the known formula-recognition restriction in code, not
+full private-source import/template or desktop Excel/macro acceptance. No audited
+private workbook, live account or production template was changed by this slice.
 
 ### 3. Annual category breakdown is not complete
 

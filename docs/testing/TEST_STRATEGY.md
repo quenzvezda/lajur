@@ -64,6 +64,11 @@ For mutations:
 - right-side monthly content remains untouched;
 - system sheets are valid/hidden;
 - no unexpected table/sheet deletion.
+- bounded monthly DATE/AD1-relative helper recognition in import/generation;
+- mixed explicit/shared series, split shared groups, short months/leap years;
+- unchanged relative expressions/shared attributes, cleared generated date caches;
+- malformed/missing helpers and conflicting day/month/year rejection with rollback;
+- byte-identical unrelated package parts on generation/import, including shared strings.
 
 These are critical tests.
 

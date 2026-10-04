@@ -271,25 +271,14 @@ public sealed partial class OpenXmlWorkbookReader
         var workbookPart = document.WorkbookPart
             ?? throw InvalidWorkbook("The package does not contain a workbook part.");
 
-        foreach (var month in Months.Values)
+        foreach (var (monthNumber, month) in Months)
         {
             var sheet = workbookPart.Workbook?.Sheets?.Elements<Sheet>()
                 .Single(candidate => candidate.Name?.Value == month.SheetName);
             var worksheetPart = (WorksheetPart)workbookPart.GetPartById(sheet!.Id!.Value!);
-            foreach (var reference in new[] { "AD1", "AG2" })
-            {
-                var cell = worksheetPart.Worksheet?.Descendants<Cell>()
-                    .SingleOrDefault(candidate => candidate.CellReference?.Value == reference)
-                    ?? throw InvalidWorkbook($"Required year helper '{month.SheetName}!{reference}' was not found.");
-                var match = DateYearRegex().Match(cell.CellFormula?.Text ?? string.Empty);
-                if (!match.Success
-                    || !int.TryParse(match.Groups[1].Value, CultureInfo.InvariantCulture, out var year))
-                {
-                    throw InvalidWorkbook($"Required year helper '{month.SheetName}!{reference}' has an unexpected formula.");
-                }
-
-                candidates.Add(year);
-            }
+            var sheetData = worksheetPart.Worksheet?.GetFirstChild<SheetData>()
+                ?? throw InvalidWorkbook($"Sheet '{month.SheetName}' does not contain sheet data.");
+            candidates.Add(MonthlyDateHelpers.ReadYear(sheetData, month.SheetName, monthNumber));
         }
 
         var rekapSheet = workbookPart.Workbook?.Sheets?.Elements<Sheet>()
@@ -557,9 +546,6 @@ public sealed partial class OpenXmlWorkbookReader
 
     [GeneratedRegex("^\\$?([A-Z]+)\\$?([0-9]+):\\$?([A-Z]+)\\$?([0-9]+)$", RegexOptions.CultureInvariant)]
     private static partial Regex TableRangeRegex();
-
-    [GeneratedRegex("(?i)DATE\\(\\s*([0-9]{4})\\s*,", RegexOptions.CultureInvariant)]
-    private static partial Regex DateYearRegex();
 
     [GeneratedRegex("\\b(?:19|20)[0-9]{2}\\b", RegexOptions.CultureInvariant)]
     private static partial Regex YearTextRegex();

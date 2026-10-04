@@ -243,7 +243,8 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         WorkbookAuditContext audit,
         DateTimeOffset occurredAtUtc)
     {
-        using var document = SpreadsheetDocument.Open(workbookPath, true);
+        // Save only explicitly changed parts; reading shared strings must not reserialize them.
+        using var document = SpreadsheetDocument.Open(workbookPath, true, new OpenSettings { AutoSave = false });
         var workbookPart = RequiredWorkbookPart(document);
 
         PatchKnownYearContent(workbookPart, key.Year);
@@ -262,7 +263,7 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         WorkbookAuditContext audit,
         DateTimeOffset occurredAtUtc)
     {
-        using var document = SpreadsheetDocument.Open(workbookPath, true);
+        using var document = SpreadsheetDocument.Open(workbookPath, true, new OpenSettings { AutoSave = false });
         var workbookPart = RequiredWorkbookPart(document);
         var indexPart = EnsureSystemSheet(workbookPart, "__AppIndex", AppIndexHeaders);
         var auditPart = EnsureSystemSheet(workbookPart, "__AuditLog", AuditLogHeaders);
@@ -386,41 +387,9 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
             var worksheetPart = FindWorksheetPart(workbookPart, month.SheetName);
             var sheetData = RequiredWorksheet(worksheetPart).GetFirstChild<SheetData>()
                 ?? throw InvalidWorkbook($"Sheet '{month.SheetName}' does not contain sheet data.");
-            PatchDateFormula(sheetData, month.SheetName, "AD1", 30, 1, targetYear, monthNumber);
-            PatchDateFormula(sheetData, month.SheetName, "AG2", 33, 2, targetYear, monthNumber);
+            MonthlyDateHelpers.PatchYear(sheetData, month.SheetName, monthNumber, targetYear);
             RequiredWorksheet(worksheetPart).Save();
         }
-    }
-
-    private static void PatchDateFormula(
-        SheetData sheetData,
-        string sheetName,
-        string reference,
-        int column,
-        uint rowNumber,
-        int targetYear,
-        int expectedMonth)
-    {
-        var row = sheetData.Elements<Row>().SingleOrDefault(candidate => candidate.RowIndex?.Value == rowNumber)
-            ?? throw InvalidWorkbook($"Required year helper '{sheetName}!{reference}' was not found.");
-        var cell = FindCell(row, column)
-            ?? throw InvalidWorkbook($"Required year helper '{sheetName}!{reference}' was not found.");
-        var cellFormula = cell.CellFormula
-            ?? throw InvalidWorkbook($"Required year helper '{sheetName}!{reference}' has no formula.");
-        var formula = cellFormula.Text;
-        var match = DateFormulaRegex().Match(formula);
-        if (!match.Success
-            || !int.TryParse(match.Groups[3].Value, CultureInfo.InvariantCulture, out var month)
-            || month != expectedMonth)
-        {
-            throw InvalidWorkbook($"Required year helper '{sheetName}!{reference}' has an unexpected formula.");
-        }
-
-        cellFormula.Text = DateFormulaRegex().Replace(
-            formula,
-            match => $"{match.Groups[1].Value}{targetYear}{match.Groups[2].Value}",
-            1);
-        cell.CellValue = null;
     }
 
     private static void ClearMonthlyTransactions(WorkbookPart workbookPart)
@@ -1286,9 +1255,6 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
 
     [GeneratedRegex("\\b(?:19|20)[0-9]{2}\\b", RegexOptions.CultureInvariant)]
     private static partial Regex YearTextRegex();
-
-    [GeneratedRegex("(?i)(DATE\\(\\s*)[0-9]{4}(\\s*,\\s*([0-9]{1,2})\\s*,)", RegexOptions.CultureInvariant)]
-    private static partial Regex DateFormulaRegex();
 
     private sealed record MonthDefinition(string SheetName, string TableName);
 

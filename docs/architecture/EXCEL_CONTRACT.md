@@ -238,6 +238,32 @@ Create a tested migration routine:
 
 and verify every monthly date helper points to the target year.
 
+The bounded monthly calendar contract is:
+
+- `AD1`: `DATE(year,month,1)`, with the month matching the explicit sheet mapping.
+- `AG2:AG32`: `DATE(year,month,AFrow)` or `$AD$1+AFrow-1`, with the AF reference
+  matching the helper's row. Mixed direct/relative series are supported.
+- Normal formulas and shared groups wholly contained in AG2:AG32 are supported.
+  Shared anchors must start their declared range; followers must belong to that
+  group. Unrelated anchors, missing helpers, incorrect offsets/months/years and
+  arbitrary expressions are rejected, not evaluated by the server.
+
+Reader and generator use the same recognition rules, allowing insignificant
+case/whitespace differences without rewriting them. Detection cross-checks AD1,
+all daily helpers, ledger dates and the Rekap year. Generation patches only the
+year token in known direct DATE formulas; relative expressions and shared-group
+attributes remain unchanged. All 31 helper slots remain present, including dates
+beyond a short month's last day; the existing analytical formulas decide how to
+display those points. AF day numbers and business formulas are not rewritten.
+All AD1/AG2:AG32 caches are cleared on generation, and Excel full recalculation is
+requested. Import does not recalculate or rewrite these helper formulas/caches.
+
+Generation/import explicitly save changed parts rather than auto-saving every
+loaded XML part; reading shared strings must not reserialize their untouched
+package part. Sanitized tests verify byte-preserved VBA, shared strings, controls,
+pivots/charts, worksheet relationships and other unrelated parts. Template
+promotion and desktop Excel/macro acceptance remain separate owner-reviewed work.
+
 ## 16. Direct server-file editing
 
 Out of scope in v1:

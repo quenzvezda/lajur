@@ -100,6 +100,11 @@ blocks outstanding local operations and never merges or silently replaces a year
 See [the workbook menu smoke guide](docs/development/WORKBOOK_MENU_SMOKE.md) before
 testing replacement on a daily-use account.
 
+Backend year validation/generation supports both direct DATE and bounded
+AD1-relative monthly calendar helpers, including shared formulas. This does not
+automatically replace or promote the newer private Excel source/template; see
+[the Excel contract](docs/architecture/EXCEL_CONTRACT.md#15-year-generation).
+
 ## Core technology direction
 
 | Area | Direction |
