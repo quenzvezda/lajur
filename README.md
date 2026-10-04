@@ -101,8 +101,12 @@ See [the workbook menu smoke guide](docs/development/WORKBOOK_MENU_SMOKE.md) bef
 testing replacement on a daily-use account.
 
 Backend year validation/generation supports both direct DATE and bounded
-AD1-relative monthly calendar helpers, including shared formulas. This does not
-automatically replace or promote the newer private Excel source/template; see
+AD1-relative monthly calendar helpers, including shared formulas. Successful
+writes request full calculation on opening without persistent forced mode. The
+reviewed clean V4 is now the local private/runtime template; existing account
+workbooks are not automatically replaced or migrated. Native 2027/2028 checks
+pass. See [the template promotion record](docs/reference/WORKBOOK_TEMPLATE_NORMALIZATION.md#v4-promotion--2026-10-04)
+and
 [the Excel contract](docs/architecture/EXCEL_CONTRACT.md#15-year-generation).
 
 ## Core technology direction

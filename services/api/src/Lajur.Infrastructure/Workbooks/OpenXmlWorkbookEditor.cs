@@ -253,7 +253,6 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         var indexPart = ResetSystemSheet(workbookPart, "__AppIndex", AppIndexHeaders);
         var auditPart = ResetSystemSheet(workbookPart, "__AuditLog", AuditLogHeaders);
         AppendMigrationAudit(auditPart, key, audit, occurredAtUtc, "GENERATE", 0, 0, 0);
-        RequestFullCalculation(workbookPart);
         Save(document, indexPart, auditPart);
         return new WorkbookMigrationResult(0, 0, 0);
     }
@@ -350,7 +349,6 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
             indexed,
             updated,
             activeEntries.Count);
-        RequestFullCalculation(workbookPart);
         Save(document, indexPart, auditPart);
         return new WorkbookMigrationResult(indexed, updated, activeEntries.Count);
     }
@@ -555,7 +553,9 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         var workbook = RequiredWorkbook(workbookPart);
         var properties = workbook.CalculationProperties ?? workbook.AppendChild(new CalculationProperties());
         properties.CalculationMode = CalculateModeValues.Auto;
-        properties.ForceFullCalculation = true;
+        // Request one full calculation when Excel opens the changed workbook,
+        // not persistent forced mode (which keeps Excel reporting xlPending).
+        properties.ForceFullCalculation = false;
         properties.FullCalculationOnLoad = true;
     }
 
@@ -1242,7 +1242,9 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
     {
         RequiredWorksheet(indexPart).Save();
         RequiredWorksheet(auditPart).Save();
-        RequiredWorkbook(RequiredWorkbookPart(document)).Save();
+        var workbookPart = RequiredWorkbookPart(document);
+        RequestFullCalculation(workbookPart);
+        RequiredWorkbook(workbookPart).Save();
     }
 
     private static InvalidDataException InvalidWorkbook(string message) => new(message);

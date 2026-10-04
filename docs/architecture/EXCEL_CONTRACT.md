@@ -152,6 +152,12 @@ API summaries are computed from transaction rows.
 
 Desktop Excel is responsible for full formula recalculation when opened. The backend may set safe calculation properties requesting recalculation on load.
 
+Every successful workbook mutation/import/year-generation save requests automatic
+calculation with `fullCalcOnLoad=true` and `forceFullCalc=false`. This asks Excel
+to rebuild results on opening without leaving the workbook in persistent forced
+calculation mode (`xlPending`). The server does not calculate or trust those
+caches. Idempotent no-op retries do not rewrite the workbook just to reset flags.
+
 Do not rewrite formula results as hardcoded values.
 
 ## 10. Table append

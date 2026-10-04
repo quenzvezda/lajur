@@ -197,6 +197,148 @@ owner's approval for **annual Rekap**. Review their coverage separately before
 claiming every monthly analytic is complete. Master budgets remain personal
 configuration: this private candidate is not a sanitized regression fixture.
 
+### Interactive V2 review findings
+
+The owner's Aug/Okt smoke test exposed a gap in the earlier tail-append tests.
+Data Baru inserts at the top and copies formats from the next row. Native
+reproduction confirms this moves the two type rules below the populated input
+rows; anchoring the rule at the header does not resolve it. A mixed pivot also
+includes income unless its page is explicitly filtered. V2 is therefore not
+approved for promotion. Its output file now contains owner-entered test rows:
+preserve that file rather than cleaning it again.
+
+A clean pre-test backup is retained for a separately named revision. The planned
+repair intentionally changes VBA source (unlike the earlier byte-preserving
+normalization): repair bounded type cues after insertion and enforce expense-only
+pivots after native refresh. Empty/income-only pivot behavior has been tested
+with a no-match label filter, not fake financial rows. Full acceptance must test
+the actual button, type edits, mixed data, Refresh All and save/reopen events.
+The owner subsequently enabled VBA-project editing temporarily; the V3 migration
+and native checks below are now complete. The owner may disable that editing
+access again without changing their normal workbook macro-execution setting.
+
+### V3 expense-pivot/type-cue repair
+
+The clean private candidate is
+`private/output/Keuangan_Pribadi_Template_2026_candidate_v3_20261004.xlsm`.
+The separate `private/output/Uji_Template_V3_20261004.xlsm` was used for owner
+smoke tests, preserving the clean candidate. V4 below supersedes V3 because its
+font-only cues did not match the owner's intended font/fill appearance.
+Both started transaction-free; the owner's populated V2 was not touched.
+
+The deliberate VBA migration adds one repair call after Data Baru's original
+format-copy/validation path, a support module and workbook events. Bounded type
+rules are restored after insertion, type edits and sheet activation, and expand
+to the actual table end if it grows beyond row 505. Analytical CF is retained.
+Pivot refresh events and workbook initialization select the Pengeluaran page
+when it exists. If an empty/income-only cache has no such item, a named no-match
+category filter displays no financial rows/total and H11 says
+`Belum ada Pengeluaran`; the page may still display `(All)` in this state.
+That fallback is filter metadata, not a synthetic ledger entry. It is removed
+when the expense page becomes available. Macros must be enabled for event-driven
+repairs/automatic filtering; this does not make pivot refresh live on every edit.
+
+Owned dummy native tests passed on all 12 sheets: the actual button macro,
+manual head insertion, red/green colors, optional payments, empty/income-only and
+mixed-data pivots, deletion of every expense, Refresh All, dynamic coverage and
+actual save/reopen Workbook_Open behavior. The annual dummy totals reconcile.
+Aug/Okt dummy print previews were rendered and inspected. Tests did not save
+transactions into the clean candidate.
+
+Read-only package/source verification retains Master, defined names, monthly
+formulas, 12 empty tables, 12 pivots, 27 charts and 12 button bindings. Original
+VBA sources are unchanged outside the reviewed migration; workbook/worksheet
+code names remain stable. Historical cache strings/comments and 615 sampled
+source descriptions are absent. An isolated actual-backend probe imports the
+empty candidate and generates/exports 2027/2028 with its new VBA byte-identical.
+The original source, tested V2 and production template remain unchanged. The
+prior generated-year full-native-calculation caveat is not waived by this probe.
+
+### V4 — exact owner-approved type colors and fills
+
+The owner saved the desired appearance in Okt of their now-populated V3 test
+copy. Read-only XML and macro-disabled native DisplayFormat establish the golden
+styles: Pengeluaran has regular font `#9C0006` and solid fill `#FFC7CE`;
+Pemasukan has regular font `#006100` and solid fill `#C6EFCE`. These saved rules,
+not a guessed red/green font alone, are the appearance reference.
+
+The new clean candidate is
+`private/output/Keuangan_Pribadi_Template_2026_candidate_v4_20261004.xlsm`;
+the dedicated owner test copy is `private/output/Uji_Template_V4_20261004.xlsm`.
+V4 copies the retained clean V3 and updates only type-rule presentation in the
+support VBA module. Its lifecycle repair applies the exact font and solid fill
+to all monthly sheets after Data Baru, type edits, activation and reopening.
+The owner's styled V3 is preserved byte-for-byte, rather than reset or cleaned.
+
+All 12 native sheet tests now assert exact rendered font/fill/pattern/regular
+style on new and older rows, manual head insertion, dynamic coverage and actual
+Workbook_Open. Expense-only pivots, payment blanks, Refresh All, deletion and
+annual dummy reconciliation still pass. Aug/Okt previews were rendered/reviewed.
+Package checks confirm clean tables/caches, retained formulas/Master/names and
+drawings/control counts, and only the reviewed VBA sources changed. An isolated
+actual-store probe imports V4 and generates/exports 2027/2028 preserving its VBA.
+At this initial V4 build step, the production template and original source were
+untouched. Full generated-year calculation was a separate gate, resolved below.
+
+Owner acceptance checklist (only the dedicated **V4** test copy):
+
+1. Enable workbook macros. VBA-project editing is a separate setting; the owner
+   elected to leave it enabled for development. Do not change Trust Center policy
+   automatically.
+2. On Aug and Okt, use Data Baru several times, set both transaction types and
+   verify Pengeluaran dark-red text/light-red fill and Pemasukan dark-green
+   text/light-green fill on new and older rows, matching the saved Okt reference.
+3. Fill dummy expenses/income, allowing payment blanks. Refresh All: the category
+   pivot should include expenses only, not income.
+4. Save, close and reopen; verify colors/filter persist. An empty or income-only
+   month should show no expense total and the explanatory notice.
+5. Report acceptance before promoting the retained clean V4; the test copy's
+   entered rows must not become the production template.
+
+The owner subsequently accepted V4's appearance and requested verification of
+generated 2027/2028. [The native year-verification report](WORKBOOK_YEAR_VERIFICATION_2026_10_04.md)
+records successful full calendar and synthetic monthly/annual/category/cached
+formula checks. The initially observed `xlPending` state was isolated to the backend's
+persistent force-full-calculation marker: a flag-only control reaches `xlDone`
+without formula changes. The verification-only request did not change the
+backend policy or promote a template. The subsequent owner-approved fix and
+promotion are now complete.
+
+### V4 promotion — 2026-10-04
+
+The clean, retained V4 candidate is now byte-for-byte installed at both local
+template targets:
+
+- `private/output/Keuangan_Pribadi_Template_2026.xlsm` (canonical private artifact);
+- `.local/lajur/templates/finance-template.xlsm` (Docker bind mount at
+  `/srv/lajur/templates/finance-template.xlsm`).
+
+Whole-file SHA-256 is
+`34A563C63BCF509861D1C2A92BA9CEA2D2080FEEBD04B72908D5E95755A22250`.
+The source candidate remains unchanged and transaction-free; owner/synthetic
+test files were not copied into production. The two prior template files were
+backed up separately, hash-verified, then replaced atomically while the API was
+stopped. Backup/evidence directory:
+`.local/lajur/backups/templates/v4-promotion-20261004T154031Z-85362530/`.
+Its `promotion-manifest.json` records the old/new hashes and protected files.
+
+Fresh actual-backend generation passes native `xlDone` for 2027/2028 under the
+corrected calculation-on-load policy. A further isolated probe using the
+installed runtime template verifies empty import/generation/export, all 36
+Master categories, corrected markers and byte-identical VBA. Existing account
+workbooks, source XLSMs and owner V3/V4 test copies retain their hashes. Promotion
+affects future creation from this template; it does **not** migrate existing
+workbooks, even when a later successful transaction write updates their markers.
+
+The Docker image has been rebuilt but the API remains stopped. On the next
+requested start, use `docker compose up -d api` to recreate the service with the
+new image; `docker start` alone would reuse the old container image.
+For template-only rollback, keep the API stopped, verify the manifest's old
+hashes, restore `canonical-before-v4.xlsm` and `runtime-before-v4.xlsm` to their
+respective exact target paths, then recheck both hashes. This does not roll back
+the application image or replace any account workbook. VBA-project editing
+remains enabled by the owner's choice; Trust Center was not changed.
+
 ## Two artifacts, two purposes
 
 Maintain two separate workbook artifacts outside the private source:
@@ -211,9 +353,9 @@ The regression fixture is now available as `tests/workbook-fixtures/LajurWorkboo
 ## Automation policy
 
 The [2026-10-03 updated-source audit](WORKBOOK_SOURCE_AUDIT_2026_10_03.md) records
-new Master/date-helper/balance-formula variants and import blockers. That source
-has not replaced the reviewed production template; the separate V2 candidate
-above is still awaiting owner acceptance. Future cleaning must preserve
+new Master/date-helper/balance-formula variants and import blockers. The source
+itself is not deployed; the reviewed, cleaned V4 derived from it has now been
+promoted as recorded above. Future cleaning must preserve
 approved formulas such as the new Des D1 roll-forward rather than blindly
 clearing every B1/D1 cell as if it were a manual value.
 

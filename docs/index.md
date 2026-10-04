@@ -56,6 +56,7 @@
 
 - [Observed workbook structure](reference/WORKBOOK_OBSERVED_STRUCTURE.md)
 - [Monthly workbook normalization](reference/WORKBOOK_TEMPLATE_NORMALIZATION.md)
+- [V4 generated-year verification, 2026-10-04](reference/WORKBOOK_YEAR_VERIFICATION_2026_10_04.md)
 - [Updated workbook audit, 2026-10-03](reference/WORKBOOK_SOURCE_AUDIT_2026_10_03.md)
 - [Glossary](reference/GLOSSARY.md)
 - [Open questions](reference/OPEN_QUESTIONS.md)
