@@ -141,6 +141,62 @@ Verification covers desktop-Excel opening, one empty table/one button/one PivotT
 
 The initial clean-template generation preserved two legacy transaction-type conditional-formatting rules whose `Applies To` ranges had expanded into fragmented, near-sheet-wide ranges. These were replaced on every monthly sheet with two bounded expression rules on `B6:B505`: `Pengeluaran` uses the existing red style and `Pemasukan` uses the existing green style. The formulas use `TRIM($B6)` so accidental surrounding spaces do not suppress the cue. Verification covers both an existing input row and a row appended to the Excel table.
 
+## Updated clean candidate (2026-10-04)
+
+The separate private review candidate is
+`private/output/Keuangan_Pribadi_Template_2026_candidate_v2_20261004.xlsm`, derived
+from the owner's updated source. It has **not** replaced the production template
+or any account workbook. Use V2: the first candidate failed package validation
+because Excel left inverted legacy dropdown ranges after shrinking October's
+table. That earlier draft is rejected, not approved for use.
+
+Owner-approved scope and results:
+
+- Retain the latest Master configuration, defined names, monthly business
+  formulas, relative date helpers and formula-driven December balance carry.
+- Clear monthly transactions, manual balance constants, private comments and
+  historical pivot members; keep an empty `A5:F6` table on each month.
+- Normalize reviewed widths/heights, chart/button geometry and button typography.
+  Rebuild monthly master-list validation before shrinking the tables, then apply
+  only `B6:B505`, `C6:C505` and `D6:D505`. Keep payment blanks allowed.
+- Restore bounded red/green type cues while retaining analytical conditions.
+- Include all 29 current Master expense categories in annual Rekap. Expand the
+  category matrix, totals and Top 10 dependencies, retaining the original
+  ranking tie-break formula. No monthly A:F table was widened.
+
+Native Excel was used for editing, recalculation, pivot refresh and previews, not
+openpyxl saving. Excel rewrote internal VBA project bytes on save; the original
+opaque `vbaProject.bin` was restored after checking workbook/worksheet code-name
+identities. Package verification and native reopening confirm the retained
+project is byte-identical to the **new source**, not the older template.
+No VBA was executed.
+
+Verification on the final candidate covers ZIP integrity, unchanged Master and
+monthly formulas/names, 12 empty tables, 12 pivots, 27 charts, 12 macro bindings,
+valid bounded dropdown/CF ranges, absence of comments and historical pivot text,
+and absence of 615 sampled original transaction descriptions from XML text.
+The cached hidden chart-helper `#N/A` values are intentional and date-dependent;
+no unexpected finance formula error was found. All 14 native sheet previews were
+reviewed. Unsaved synthetic native tests reconcile every expense category, annual
+ledger/category totals, Top 10, January pivot totals, existing/appended-row type
+colors and December balance carry.
+
+An isolated probe using the actual backend store reads the candidate, imports
+it empty, and generates/exports 2027 and 2028 while retaining VBA. It does not
+touch deployed storage. Targeted native calendar checks confirm February 28 in
+2027, February 29 in 2028, October 31 and November 30, plus the retained December
+formula. The application-wide calculation state remains `xlPending` on both
+generated files, even after an explicit rebuild. These targeted values pass;
+full generated-workbook desktop calculation is **not** certified. Manual
+macro/visual/Refresh All acceptance remains a review gate; do not equate backend
+generation success with complete native workbook acceptance.
+
+Monthly fixed ranking helpers still follow the supplied source and do not cover
+every current expense category. They were not silently expanded under the
+owner's approval for **annual Rekap**. Review their coverage separately before
+claiming every monthly analytic is complete. Master budgets remain personal
+configuration: this private candidate is not a sanitized regression fixture.
+
 ## Two artifacts, two purposes
 
 Maintain two separate workbook artifacts outside the private source:
@@ -156,7 +212,8 @@ The regression fixture is now available as `tests/workbook-fixtures/LajurWorkboo
 
 The [2026-10-03 updated-source audit](WORKBOOK_SOURCE_AUDIT_2026_10_03.md) records
 new Master/date-helper/balance-formula variants and import blockers. That source
-has not replaced the reviewed production template. Future cleaning must preserve
+has not replaced the reviewed production template; the separate V2 candidate
+above is still awaiting owner acceptance. Future cleaning must preserve
 approved formulas such as the new Des D1 roll-forward rather than blindly
 clearing every B1/D1 cell as if it were a manual value.
 

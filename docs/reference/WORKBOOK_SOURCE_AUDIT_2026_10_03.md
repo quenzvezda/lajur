@@ -209,3 +209,12 @@ formula. No cleaning/promotion was performed in this audit.
 The committed fixture must remain synthetic and distinct from the private
 production candidate. Regenerate/update it only after the new contract variants
 and intended analytics are agreed.
+
+Follow-up (2026-10-04): the owner approved complete annual expense-category
+coverage. A separate clean V2 candidate now includes all 29 current expense
+categories in Rekap, preserving monthly formulas and the latest Master/VBA.
+Native synthetic reconciliation, package/privacy checks and isolated backend
+import/generation pass. See [template normalization](WORKBOOK_TEMPLATE_NORMALIZATION.md)
+for verified scope and remaining acceptance gates. The original daily-use source,
+historical category decision, production template and live accounts are unchanged.
+Monthly fixed-ranking coverage was not included in the annual-Rekap approval.
