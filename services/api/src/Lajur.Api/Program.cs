@@ -1,6 +1,7 @@
 using Lajur.Api.Auth;
 using Lajur.Api.Errors;
 using Lajur.Api.Health;
+using Lajur.Api.Web;
 using Lajur.Application.Auth;
 using Lajur.Infrastructure.Auth;
 using Lajur.Infrastructure.Finance;
@@ -103,6 +104,7 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         };
     });
 builder.Services.AddAuthorization();
+builder.Services.AddLajurWebViewer(builder.Configuration, builder.Environment);
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -127,6 +129,15 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, cancellationToken) =>
     {
+        if (!context.HttpContext.Request.Path.StartsWithSegments("/api"))
+        {
+            context.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
+            await context.HttpContext.Response.WriteAsync(
+                "Terlalu banyak percobaan masuk. Tunggu satu menit lalu coba lagi.",
+                cancellationToken);
+            return;
+        }
+
         context.HttpContext.Response.ContentType = "application/problem+json";
         await context.HttpContext.Response.WriteAsJsonAsync(new
         {
@@ -161,11 +172,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseExceptionHandler();
 app.UseHttpsRedirection();
+app.UseLajurWebSecurityHeaders();
+app.UseStaticFiles();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapRazorPages();
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {

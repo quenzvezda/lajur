@@ -1,0 +1,69 @@
+@page "/buku/{year:int?}"
+@model BukuModel
+@{
+    ViewData["Title"] = Model.Year is { } y ? $"Buku {y}" : "Buku";
+    ViewData["BodyClass"] = "page-book";
+}
+<header class="topbar">
+    <a class="brand" href="/buku" aria-label="Lajur — beranda">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Lajur</span>
+    </a>
+
+    @if (Model.Years.Count > 0)
+    {
+        <nav class="year-switch" aria-label="Pilih tahun">
+            @foreach (var available in Model.Years)
+            {
+                <a class="year-chip @(available == Model.Year ? "is-active" : null)"
+                   href="/buku/@available"
+                   aria-current="@(available == Model.Year ? "page" : null)">@available</a>
+            }
+        </nav>
+    }
+
+    <div class="topbar-meta">
+        <span class="badge badge--muted" title="Web viewer hanya membaca data. Tambah/ubah transaksi lewat aplikasi Android.">Hanya-baca</span>
+        <span id="last-updated" class="muted small"></span>
+        <span class="user" title="Akun">@Model.Username</span>
+        <form method="post" action="/keluar" class="inline-form">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="button button--ghost">Keluar</button>
+        </form>
+    </div>
+</header>
+
+@if (Model.Years.Count == 0)
+{
+    <main class="empty-state">
+        <h1>Belum ada buku</h1>
+        <p>Akun ini belum memiliki workbook di server. Buat atau impor buku tahun berjalan dari aplikasi Android, lalu muat ulang halaman ini.</p>
+    </main>
+}
+else if (Model.Report is null)
+{
+    <main class="empty-state">
+        <h1>@(Model.ErrorMessage ?? "Buku tidak ditemukan")</h1>
+        <p>Pilih tahun lain di atas.</p>
+    </main>
+}
+else
+{
+    <nav class="sheet-tabs" id="sheet-tabs" role="tablist" aria-label="Lembar buku"></nav>
+    <p class="sync-note">
+        Angka dihitung ulang dari tabel transaksi (kolom A:F) dan sheet Master saat halaman dibuka.
+        Transaksi yang masih antre di HP baru terlihat setelah tersinkron.
+    </p>
+    <main id="app" class="workspace" aria-live="polite">
+        <noscript><p class="alert alert--error">Aktifkan JavaScript untuk melihat tabel dan grafik.</p></noscript>
+    </main>
+    <div id="popover-root"></div>
+    <script type="application/json" id="report-data">@Html.Raw(Model.ReportJson())</script>
+}
+
+@section Scripts {
+    @if (Model.Report is not null)
+    {
+        <script src="~/js/viewer.js" asp-append-version="true"></script>
+    }
+}

@@ -1,5 +1,6 @@
 using Lajur.Application.Auth;
 using Lajur.Application.Finance;
+using Lajur.Application.Reports;
 using Lajur.Application.Workbooks;
 using Lajur.Infrastructure.Workbooks;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +31,7 @@ public static class FinanceServiceCollectionExtensions
         });
         services.AddScoped<IFinanceService, WorkbookFinanceService>();
         services.AddScoped<IWorkbookService, WorkbookManagementService>();
+        services.AddScoped<IFinanceReportService, WorkbookFinanceReportService>();
         return services;
     }
 }

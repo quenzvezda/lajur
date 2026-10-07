@@ -58,6 +58,12 @@ public sealed record StoredWorkbookInfo(
     long SizeBytes,
     DateTimeOffset LastModifiedAtUtc);
 
+public sealed record WorkbookYearData(
+    DateTimeOffset LastModifiedAtUtc,
+    WorkbookMasterData Master,
+    IReadOnlyList<IReadOnlyList<WorkbookTransactionRow>> Months,
+    IReadOnlyList<WorkbookMonthBalanceInputs> Balances);
+
 public sealed record StoredWorkbookImportResult(
     WorkbookMigrationResult Migration,
     bool ReplacedExisting,

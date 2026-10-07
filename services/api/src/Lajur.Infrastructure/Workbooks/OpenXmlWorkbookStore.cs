@@ -257,6 +257,32 @@ public sealed class OpenXmlWorkbookStore
         CancellationToken cancellationToken = default) =>
         ReadAsync(key, (reader, path) => reader.ReadMonthlyTransactions(path, month), cancellationToken);
 
+    /// <summary>
+    /// Reads Master, all twelve monthly tables and balance inputs from a single workbook revision.
+    /// Holding the per-workbook lock for the whole read keeps totals, tables and charts consistent
+    /// while Android writes are queued behind it. Never mutates the workbook.
+    /// </summary>
+    public Task<WorkbookYearData> ReadYearAsync(
+        WorkbookKey key,
+        CancellationToken cancellationToken = default) =>
+        ReadAsync(
+            key,
+            (reader, path) =>
+            {
+                var lastModified = new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
+                var master = reader.ReadMasterData(path, key.Year);
+                var months = new IReadOnlyList<WorkbookTransactionRow>[12];
+                var balances = new WorkbookMonthBalanceInputs[12];
+                for (var month = 1; month <= 12; month++)
+                {
+                    months[month - 1] = reader.ReadMonthlyTransactions(path, month);
+                    balances[month - 1] = reader.ReadMonthBalanceInputs(path, month);
+                }
+
+                return new WorkbookYearData(lastModified, master, months, balances);
+            },
+            cancellationToken);
+
     public Task<WorkbookTransaction?> GetTransactionAsync(
         WorkbookKey key,
         Guid transactionId,

@@ -1,0 +1,34 @@
+@page "/masuk"
+@model MasukModel
+@{
+    ViewData["Title"] = "Masuk";
+    ViewData["BodyClass"] = "page-login";
+}
+<main class="login">
+    <form method="post" class="login-card" novalidate>
+        <div class="brand brand--large">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>Lajur</span>
+        </div>
+        <p class="login-lead">Lihat buku keuangan Anda dari browser. Tampilan ini hanya-baca.</p>
+
+        @if (Model.ErrorMessage is not null)
+        {
+            <p class="alert alert--error" role="alert">@Model.ErrorMessage</p>
+        }
+
+        <label class="field">
+            <span>Nama pengguna</span>
+            <input asp-for="Username" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus>
+            <span asp-validation-for="Username" class="field-error"></span>
+        </label>
+        <label class="field">
+            <span>Kata sandi</span>
+            <input asp-for="Password" autocomplete="current-password">
+            <span asp-validation-for="Password" class="field-error"></span>
+        </label>
+        <input type="hidden" asp-for="ReturnUrl" name="kembali">
+        <button type="submit" class="button button--primary button--block">Masuk</button>
+        <p class="login-note">Masuk di browser tidak mengeluarkan aplikasi Android Anda.</p>
+    </form>
+</main>

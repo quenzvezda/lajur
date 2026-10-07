@@ -126,7 +126,7 @@ Certificate pinning is not required for v1 because its operational rotation cost
 Persist outside ephemeral container filesystem:
 
 - JWT/signing material;
-- ASP.NET Data Protection keys if used;
+- ASP.NET Data Protection keys (`keys/data-protection`, used by browser cookies/antiforgery);
 - production secrets;
 - auth SQLite;
 - workbook data/backups.
@@ -141,7 +141,22 @@ Operator-assisted CLI/admin reset is acceptable for a private/self-hosted deploy
 
 Changing/resetting a password should revoke all refresh sessions.
 
-## 13. Rate limiting
+## 13. Browser (web viewer) session
+
+See ADR 0008. The read-only web viewer uses its own cookie scheme, separate from Android JWTs:
+
+- browser login only verifies the password; it never creates, rotates or revokes Android devices
+  or refresh sessions, so signing in on a PC does not sign the phone out;
+- cookie `__Host-lajur-web`: HttpOnly, Secure, SameSite=Lax, 12 h sliding, non-persistent;
+- the cookie holds a security stamp derived from the password hash, revalidated per request, so a
+  password reset or disabled account ends every browser session;
+- login/logout forms use antiforgery tokens; failed and successful credential POSTs share the
+  per-IP login limit; return URLs must be local;
+- `/api/v1` does not accept the browser cookie and keeps its JSON 401 contract;
+- HTML pages send CSP (`default-src 'self'`, no inline script), `frame-ancestors 'none'`,
+  `nosniff`, `no-referrer` and `Cache-Control: no-store`.
+
+## 14. Rate limiting
 
 Apply rate limits at minimum to:
 

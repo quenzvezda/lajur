@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>@(ViewData["Title"] is string title ? $"{title} · Lajur" : "Lajur")</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="~/css/app.css" asp-append-version="true">
+</head>
+<body class="@ViewData["BodyClass"]">
+    @RenderBody()
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

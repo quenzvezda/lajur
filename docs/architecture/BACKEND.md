@@ -55,6 +55,14 @@ Canonical host layout:
 
 Never derive `<immutable-user-id>` from a username or upload filename.
 
+## 3a. Read-only web viewer
+
+`Lajur.Api` also serves Razor Pages (`Pages/`) and static assets (`wwwroot/`) for the browser
+viewer (ADR 0008). `IFinanceReportService` reads one consistent year snapshot through
+`OpenXmlWorkbookStore.ReadYearAsync` (Master + twelve A:F tables + B1/D1 balance inputs, under the
+per-workbook lock) and `FinanceReportCalculator` recomputes the Rekap/monthly aggregates. The
+viewer never writes to the workbook and never reads cached formula/pivot values.
+
 ## 4. Per-workbook serialization
 
 All operations targeting the same user/year workbook must pass through a per-key asynchronous lock.

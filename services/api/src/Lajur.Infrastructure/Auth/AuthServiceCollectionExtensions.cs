@@ -44,6 +44,7 @@ public static class AuthServiceCollectionExtensions
         services.AddScoped<SqliteAuthService>();
         services.AddScoped<IAuthService>(provider => provider.GetRequiredService<SqliteAuthService>());
         services.AddScoped<IAccountAdministration>(provider => provider.GetRequiredService<SqliteAuthService>());
+        services.AddScoped<IBrowserAuthService>(provider => provider.GetRequiredService<SqliteAuthService>());
         services.AddSingleton<IUserStoragePathResolver, UserStoragePathResolver>();
         services.AddSingleton(TimeProvider.System);
         return services;

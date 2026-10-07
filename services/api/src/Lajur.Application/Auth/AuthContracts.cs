@@ -73,3 +73,18 @@ public interface IAccessTokenIssuer
 {
     IssuedAccessToken Issue(Guid userId, string username, Guid deviceId, Guid sessionFamilyId);
 }
+
+/// <summary>
+/// A browser (web viewer) identity. The security stamp is derived from the stored password hash so a
+/// password reset invalidates every browser cookie without touching Android device sessions.
+/// </summary>
+public sealed record BrowserIdentity(Guid UserId, string Username, string SecurityStamp);
+
+public interface IBrowserAuthService
+{
+    /// <summary>Checks credentials without creating, revoking or rotating any Android device session.</summary>
+    Task<BrowserIdentity?> VerifyCredentialsAsync(string username, string password, CancellationToken cancellationToken);
+
+    /// <summary>Returns the current identity, or null when the account is missing or disabled.</summary>
+    Task<BrowserIdentity?> GetActiveIdentityAsync(Guid userId, CancellationToken cancellationToken);
+}

@@ -52,6 +52,7 @@
 - [ADRs](adr/README.md)
 - [Execution plans](exec-plans/README.md)
 - [Active MVP plan](exec-plans/active/0001-mvp.md)
+- [ADR 0008 — read-only web viewer](adr/0008-read-only-web-viewer-and-browser-session.md) (proposed)
 
 ## Reference
 
