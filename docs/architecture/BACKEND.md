@@ -49,6 +49,7 @@ Canonical host layout:
   auth/
     lajur-auth.db
   keys/
+  staging/               # transient import uploads, deleted after each request
   logs/                  # optional if not stdout-only
 ```
 

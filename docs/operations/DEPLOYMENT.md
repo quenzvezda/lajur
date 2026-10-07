@@ -43,6 +43,7 @@ Mount host directories:
 /srv/lajur/templates
 /srv/lajur/auth
 /srv/lajur/keys
+/srv/lajur/staging
 ```
 
 Container replacement must not remove data/session keys.

@@ -19,6 +19,8 @@ services:
       - "${LAJUR_TEMPLATES_PATH:-./.local/lajur/templates}:/srv/lajur/templates"
       - "${LAJUR_AUTH_PATH:-./.local/lajur/auth}:/srv/lajur/auth"
       - "${LAJUR_KEYS_PATH:-./.local/lajur/keys}:/srv/lajur/keys"
+      # Import uploads are staged here before validation; the root filesystem is read-only.
+      - "${LAJUR_STAGING_PATH:-./.local/lajur/staging}:/srv/lajur/staging"
     read_only: true
     tmpfs:
       - /tmp
