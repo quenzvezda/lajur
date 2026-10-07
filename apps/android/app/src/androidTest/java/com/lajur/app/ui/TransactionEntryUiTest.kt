@@ -235,7 +235,7 @@ class TransactionEntryUiTest {
                     snackbar = remember { SnackbarHostState() }, onQueryChange = { query = it },
                     onPreviousMonth = {}, onNextMonth = {}, onRefresh = {}, onRetry = {}, onCreateWorkbook = {},
                     onAdd = {}, onTransaction = {}, onPickImage = {}, onTakePhoto = {}, onOpenSharedImage = {},
-                    onDiscardSharedImage = {}, onSettings = {}, onSignOut = {})
+                    onDiscardSharedImage = {}, tab = MainTab.HISTORY, onTab = {})
             }
         }
         compose.onNodeWithTag("home-content").performScrollToNode(hasTestTag("transaction-review-toggle"))

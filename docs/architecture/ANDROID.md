@@ -24,6 +24,13 @@ Retrofit. These are implementation choices, not new architectural constraints;
 introduce a framework only when a later slice demonstrates enough repeated
 wiring to justify it.
 
+The signed-in UI currently uses explicit `AppScreen` routes rather than a
+Navigation Compose dependency. `MainTab` covers Home/History/Scan/Insight/Settings;
+focused routes record their originating list where needed. A shared Back action
+handles toolbar/system navigation and the Home two-press exit gate, resetting on
+route changes/backgrounding. Child modal handlers and the workbook transfer busy
+guard retain priority. Finishing the Activity does not clear the server session.
+
 ## 2. Suggested modules/packages
 
 A single Gradle app module is acceptable for the first vertical slice. Split only when build/ownership boundaries justify it.

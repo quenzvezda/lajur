@@ -4,7 +4,9 @@ This document defines information architecture and behavior, not final visual st
 
 ## 1. Navigation
 
-v1 should avoid unnecessary bottom-navigation complexity.
+Primary signed-in destinations use a fixed bottom bar: **Beranda**, **Riwayat**,
+**Scan** (prominent center action), **Insight**, and **Setelan**. Insight is an
+explicit TODO/coming-soon placeholder, not an implemented budgeting feature.
 
 Required destinations:
 
@@ -28,11 +30,18 @@ Launch/Auth Gate
 
 Home transaction tap → Transaction Detail → Edit / Delete
 
-Home settings icon → Settings
+Bottom bar Setelan → Settings
 Settings → Data / Workbook → list/create/import/export
 ```
 
-A later design may introduce bottom navigation only if additional primary destinations justify it.
+Focused editor/detail/workbook/scan-review screens hide the bottom bar. System
+Back and toolbar Back follow the same routes: new entry returns to its originating
+Home/History, edit returns to detail, detail returns to its originating list,
+workbook returns to Settings, and scan review discards the draft and returns to
+the Scan entry page. Back on other primary destinations returns to Home.
+On Home, first Back shows **Tekan sekali lagi untuk keluar**; another press within
+two seconds finishes the Activity without signing out. Navigation or backgrounding
+resets this window. Modal dialogs/sheets and the workbook busy guard take priority.
 
 ## 2. Launch/auth gate
 
@@ -76,31 +85,40 @@ Default scope: current calendar month.
 Suggested content:
 
 ```text
-Lajur                                      [Settings]
+Lajur
 
 September 2026                           [change month]
 
-Monthly expense
-Rp x.xxx.xxx
+Ringkasan bulan ini
+Pemasukan / Pengeluaran / Selisih / Jumlah transaksi
 
-[ + Manual ]                       [ Scan ]
+[ + Tambah ]
 
 Sync: ✓ / Pending 3 / Error
 
-Today
+Transaksi terbaru                        [Lihat semua]
 ─────────────────────────────────────────
 Rp 85.000     Kebutuhan · Shopee Pay
 Rp 25.000     Jajan · Cash
 Rp 40.000     Transport · Bank
+
+[Beranda] [Riwayat] [Scan] [Insight] [Setelan]
 ```
 
-Keep dashboard information intentionally light. The workbook remains the rich reporting surface.
+The implemented Home shows the selected month, full-month income/expense,
+**Selisih bulan ini** (income minus expense, not an account balance), loaded
+transaction count, sync/review reminders, and up to three non-deleted recent-date
+transactions. **Lihat semua** opens History, where full-month search and review
+filtering live. History search must not filter Home totals or preview.
+Income cards use green, expense cards red in light and dark themes; explicit
+type labels remain so meaning is not conveyed by color alone. Manual **+ Tambah**
+is available on Home and History. The workbook remains the rich reporting surface.
 
 When cached non-deleted rows in the selected month have empty payment (or another
 missing/invalid required field), show **Perlu dilengkapi** with a transaction
 count and **Lihat transaksi**. This count is independent of text search, not an
 account-wide/server completeness claim. The action clears search and filters
-the list; **Lihat semua transaksi** removes the review filter. No blocking modal,
+the History list; **Lihat semua transaksi** removes the review filter. No blocking modal,
 unpaid status, or change to financial totals. Filling payment later is an edit
 to the original row. A blank method reads **Pembayaran belum diisi** on the list.
 
@@ -151,7 +169,7 @@ Save behavior:
 
 Entry points:
 
-- Home → Scan;
+- bottom bar center Scan → image/camera entry page;
 - image picker;
 - camera;
 - incoming Android image share intent.

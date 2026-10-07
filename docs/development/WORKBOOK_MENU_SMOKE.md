@@ -1,6 +1,6 @@
 # Android Data/Workbook smoke test
 
-Entry: Home → Pengaturan → Data / Workbook. A new account also exposes
+Entry: bottom bar Setelan → Data / Workbook. A new account also exposes
 **Impor workbook yang sudah ada** during onboarding.
 
 ## Safe first pass on the daily-use account

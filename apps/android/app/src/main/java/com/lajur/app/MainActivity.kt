@@ -60,6 +60,7 @@ class MainActivity : FragmentActivity() {
                         )
                     },
                     takePhoto = ::takePhoto,
+                    onExit = ::finish,
                 )
             }
         }

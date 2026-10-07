@@ -28,6 +28,7 @@
 - [Phase 8 local-model development](development/PHASE8_LOCAL_MODEL.md)
 - [Smart Scan and editor UX smoke test](development/SMART_SCAN_UX_SMOKE.md)
 - [Data/Workbook menu smoke test](development/WORKBOOK_MENU_SMOKE.md)
+- [Home and Back navigation smoke test](development/HOME_NAVIGATION_SMOKE.md)
 - [Local extraction model candidates](reference/LOCAL_MODEL_CANDIDATES.md)
 - [Evidence-first Smart Scan decision](adr/0007-evidence-first-smart-scan.md)
 - [Known issues](development/KNOWN_ISSUES.md)

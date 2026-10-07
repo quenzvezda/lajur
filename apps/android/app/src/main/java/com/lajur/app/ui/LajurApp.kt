@@ -1,5 +1,6 @@
 package com.lajur.app.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,11 +12,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -40,6 +43,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -52,23 +58,10 @@ import com.lajur.app.security.AppLockSettings
 import com.lajur.app.security.AppLockStatus
 import com.lajur.app.scan.SmartScanState
 import com.lajur.app.scan.ScanSuggestionState
-import com.lajur.app.scan.extraction.ValidatedTransactionExtraction
 import java.text.NumberFormat
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-
-private sealed interface AppScreen {
-    data object Home : AppScreen
-    data object Settings : AppScreen
-    data object Workbooks : AppScreen
-    data object SmartScan : AppScreen
-    data class Editor(
-        val transaction: LocalTransaction?,
-        val extraction: ValidatedTransactionExtraction? = null,
-    ) : AppScreen
-    data class Detail(val transaction: LocalTransaction) : AppScreen
-}
 
 @Composable
 fun LajurApp(
@@ -76,6 +69,7 @@ fun LajurApp(
     authenticate: (Boolean, () -> Unit, (String) -> Unit) -> Unit,
     pickImage: () -> Unit,
     takePhoto: () -> Unit,
+    onExit: () -> Unit,
 ) {
     val session by viewModel.session.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
@@ -106,7 +100,7 @@ fun LajurApp(
                 if (workbookSetup) WorkbookRoute(viewModel) { workbookSetup = false }
                 else OnboardingScreen(busy, { viewModel.createWorkbook() }, { workbookSetup = true }, viewModel::signOut)
             } else {
-                SignedInApp(viewModel, state, authenticate, pickImage, takePhoto)
+                SignedInApp(viewModel, state, authenticate, pickImage, takePhoto, onExit)
             }
         }
     }
@@ -119,6 +113,7 @@ private fun SignedInApp(
     authenticate: (Boolean, () -> Unit, (String) -> Unit) -> Unit,
     pickImage: () -> Unit,
     takePhoto: () -> Unit,
+    onExit: () -> Unit,
 ) {
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val summary by viewModel.summary.collectAsStateWithLifecycle()
@@ -133,8 +128,16 @@ private fun SignedInApp(
     val scanReview by viewModel.scanReview.collectAsStateWithLifecycle()
     val scanReportSaving by viewModel.scanReportSaving.collectAsStateWithLifecycle()
     val scanDiagnosticStatus by viewModel.scanDiagnosticStatus.collectAsStateWithLifecycle()
-    var screen: AppScreen by remember { mutableStateOf(AppScreen.Home) }
+    var screen: AppScreen by remember { mutableStateOf(AppScreen.Main()) }
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val goBack = rememberAppBackAction(screen,
+        onNavigate = { target ->
+            if (screen == AppScreen.SmartScan) viewModel.discardScan()
+            screen = target
+        }, onExit = onExit, onExitPrompt = {
+            Toast.makeText(context, "Tekan sekali lagi untuk keluar", Toast.LENGTH_SHORT).show()
+        })
 
     LaunchedEffect(message) {
         message?.let {
@@ -145,11 +148,11 @@ private fun SignedInApp(
 
     LaunchedEffect(smartScanState) {
         if (smartScanState is SmartScanState.Ready) screen = AppScreen.SmartScan
-        if (smartScanState is SmartScanState.Idle && screen == AppScreen.SmartScan) screen = AppScreen.Home
+        if (smartScanState is SmartScanState.Idle && screen == AppScreen.SmartScan) screen = AppScreen.Main(MainTab.SCAN)
     }
 
     when (val current = screen) {
-        AppScreen.Home -> HomeScreen(
+        is AppScreen.Main -> if (current.tab != MainTab.SETTINGS) HomeScreen(
             month = month,
             transactions = transactions,
             incomeIdr = summary.incomeIdr,
@@ -166,18 +169,17 @@ private fun SignedInApp(
             onRefresh = viewModel::refresh,
             onRetry = viewModel::retrySync,
             onCreateWorkbook = { viewModel.createWorkbook(month.year) },
-            onAdd = { screen = AppScreen.Editor(null) },
-            onTransaction = { screen = AppScreen.Detail(it) },
+            onAdd = { screen = AppScreen.Editor(null, origin = current.tab) },
+            onTransaction = { screen = AppScreen.Detail(it, current.tab) },
             onPickImage = pickImage,
             onTakePhoto = takePhoto,
             onOpenSharedImage = { screen = AppScreen.SmartScan },
             onDiscardSharedImage = viewModel::discardSharedImage,
-            onSettings = { screen = AppScreen.Settings },
-            onSignOut = viewModel::signOut,
-        )
-        AppScreen.Settings -> SettingsScreen(
+            tab = current.tab,
+            onTab = { screen = AppScreen.Main(it) },
+        ) else SettingsScreen(
             settings = lockSettings,
-            onBack = { screen = AppScreen.Home },
+            onBack = goBack,
             onEnableRequest = { onError ->
                 authenticate(
                     lockSettings.deviceCredentialFallback,
@@ -201,8 +203,10 @@ private fun SignedInApp(
             onScreenProtection = viewModel::setScreenProtectionEnabled,
             onLockNow = viewModel::lockNow,
             onData = { screen = AppScreen.Workbooks },
+            onSignOut = viewModel::signOut,
+            bottomBar = { MainNavigationBar(MainTab.SETTINGS, pendingSharedImage != null) { screen = AppScreen.Main(it) } },
         )
-        AppScreen.Workbooks -> WorkbookRoute(viewModel) { screen = AppScreen.Settings }
+        AppScreen.Workbooks -> WorkbookRoute(viewModel, goBack)
         AppScreen.SmartScan -> SmartScanScreen(
             state = smartScanState,
             snapshot = scanReview,
@@ -213,10 +217,7 @@ private fun SignedInApp(
             onCancelSuggestions = viewModel::cancelScanSuggestions,
             onProcess = viewModel::processScan,
             onRetry = viewModel::processScan,
-            onBack = {
-                viewModel.discardScan()
-                screen = AppScreen.Home
-            },
+            onBack = goBack,
             onManualEntry = { extraction ->
                 viewModel.discardScan()
                 screen = AppScreen.Editor(null, extraction)
@@ -226,16 +227,16 @@ private fun SignedInApp(
             transaction = current.transaction,
             initialExtraction = current.extraction,
             master = master,
-            onBack = { screen = AppScreen.Home },
+            onBack = goBack,
             onSave = { draft ->
-                viewModel.save(current.transaction?.transactionId, draft) { screen = AppScreen.Home }
+                viewModel.save(current.transaction?.transactionId, draft) { screen = AppScreen.Main(current.origin) }
             },
         )
         is AppScreen.Detail -> TransactionDetail(
             transaction = current.transaction,
-            onBack = { screen = AppScreen.Home },
-            onEdit = { screen = AppScreen.Editor(current.transaction) },
-            onDelete = { viewModel.delete(current.transaction) { screen = AppScreen.Home } },
+            onBack = goBack,
+            onEdit = { screen = AppScreen.Editor(current.transaction, origin = current.origin) },
+            onDelete = { viewModel.delete(current.transaction) { screen = AppScreen.Main(current.origin) } },
         )
     }
 }
@@ -354,48 +355,63 @@ internal fun HomeScreen(
     onTakePhoto: () -> Unit,
     onOpenSharedImage: () -> Unit,
     onDiscardSharedImage: () -> Unit,
-    onSettings: () -> Unit,
-    onSignOut: () -> Unit,
+    tab: MainTab = MainTab.HOME,
+    onTab: (MainTab) -> Unit,
 ) {
     var incompleteOnly by rememberSaveable(month.toString()) { mutableStateOf(false) }
+    val listState = remember(tab, month) { LazyListState() }
     val incompleteCount = transactions.count { !it.isDeleted && missingTransactionFields(it.draft).isNotEmpty() }
-    val visibleTransactions = filterTransactionReview(transactions, query, incompleteOnly)
+    val visibleTransactions = if (tab == MainTab.HOME) transactions.filterNot { it.isDeleted }
+        .sortedWith(compareByDescending<LocalTransaction> { it.draft.date }.thenBy { it.transactionId }).take(3)
+        else filterTransactionReview(transactions, query, incompleteOnly)
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Lajur") },
-                actions = {
-                    TextButton(onClick = onSettings) { Text("Pengaturan") }
-                    TextButton(onClick = onSignOut) { Text("Keluar") }
-                },
+                title = { Text(when (tab) {
+                    MainTab.HOME -> "Lajur"
+                    MainTab.SCAN -> "Smart Scan"
+                    else -> tab.label
+                }) },
             )
         },
+        bottomBar = { MainNavigationBar(tab, hasPendingSharedImage, onTab) },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            if (hasWorkbook) FloatingActionButton(onClick = onAdd) { Text("+") }
+            if (hasWorkbook && (tab == MainTab.HOME || tab == MainTab.HISTORY))
+                FloatingActionButton(onClick = onAdd, modifier = Modifier.testTag("add-transaction")) {
+                    Text("+ Tambah", Modifier.padding(horizontal = 12.dp))
+                }
         },
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp).testTag("home-content"),
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item {
+            if (tab == MainTab.HOME || tab == MainTab.HISTORY) item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = onPreviousMonth) { Text("‹") }
                     Text(month.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.forLanguageTag("id-ID"))), style = MaterialTheme.typography.titleLarge)
                     OutlinedButton(onClick = onNextMonth) { Text("›") }
                 }
             }
-            item {
+            if (tab == MainTab.HOME) item {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
+                        Text("Ringkasan bulan ini", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(12.dp))
+                        Text("Pemasukan", style = MaterialTheme.typography.labelLarge)
+                        Text(formatIdr(incomeIdr), style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.height(10.dp))
                         Text("Pengeluaran", style = MaterialTheme.typography.labelLarge)
-                        Text(formatIdr(expenseIdr), style = MaterialTheme.typography.headlineMedium)
-                        Text("Pemasukan ${formatIdr(incomeIdr)}")
+                        Text(formatIdr(expenseIdr), style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.height(10.dp))
+                        Text("Selisih bulan ini ${formatIdr(incomeIdr - expenseIdr)}")
+                        Text("${transactions.count { !it.isDeleted }} transaksi", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
-            if (!hasWorkbook) {
+            if (!hasWorkbook && (tab == MainTab.HOME || tab == MainTab.HISTORY)) {
                 item {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
@@ -407,7 +423,7 @@ internal fun HomeScreen(
                     }
                 }
             }
-            if (hasPendingSharedImage) {
+            if (hasPendingSharedImage && tab == MainTab.SCAN) {
                 item {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
@@ -419,11 +435,12 @@ internal fun HomeScreen(
                     }
                 }
             }
-            item {
+            if (tab == MainTab.SCAN) item {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Smart Scan", style = MaterialTheme.typography.titleMedium)
                         Text("OCR berjalan di perangkat. Gambar dan teks tidak dikirim ke server.")
+                        Text("Pilih struk, lalu periksa draft sebelum menyimpan. Saran AI tetap opsional.")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = onPickImage) { Text("Pilih gambar") }
                             OutlinedButton(onClick = onTakePhoto) { Text("Kamera") }
@@ -431,7 +448,17 @@ internal fun HomeScreen(
                     }
                 }
             }
-            item {
+            if (tab == MainTab.INSIGHTS) item {
+                Card(Modifier.fillMaxWidth().testTag("insights-placeholder")) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Insight · segera hadir", style = MaterialTheme.typography.titleLarge)
+                        Text("TODO: ringkasan dan analitik tambahan. Belum tersedia pada versi ini.")
+                        Text("Untuk saat ini, lihat ringkasan bulanan di Beranda atau analitik pada workbook Excel.")
+                        OutlinedButton(onClick = { onTab(MainTab.HOME) }) { Text("Lihat ringkasan bulan") }
+                    }
+                }
+            }
+            if (tab == MainTab.HOME || tab == MainTab.HISTORY) item {
                 val syncText = when {
                     syncCounts.failed > 0 -> "Error ${syncCounts.failed} — ketuk untuk coba lagi"
                     syncCounts.pending > 0 -> "Pending ${syncCounts.pending}"
@@ -443,7 +470,7 @@ internal fun HomeScreen(
                     TextButton(onClick = onRefresh) { Text("Refresh") }
                 }
             }
-            if (incompleteCount > 0 || incompleteOnly) item {
+            if ((tab == MainTab.HOME || tab == MainTab.HISTORY) && (incompleteCount > 0 || incompleteOnly)) item {
                 Card(Modifier.fillMaxWidth().testTag("transaction-review-reminder")) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Perlu dilengkapi", style = MaterialTheme.typography.titleMedium)
@@ -452,13 +479,14 @@ internal fun HomeScreen(
                         TextButton(onClick = {
                             incompleteOnly = !incompleteOnly
                             onQueryChange("")
+                            if (tab == MainTab.HOME) onTab(MainTab.HISTORY)
                         }, modifier = Modifier.testTag("transaction-review-toggle")) {
                             Text(if (incompleteOnly) "Lihat semua transaksi" else "Lihat transaksi")
                         }
                     }
                 }
             }
-            item {
+            if (tab == MainTab.HISTORY) item {
                 OutlinedTextField(
                     query,
                     onQueryChange,
@@ -467,9 +495,17 @@ internal fun HomeScreen(
                     singleLine = true,
                 )
             }
-            if (visibleTransactions.isEmpty()) {
-                item { Text(if (incompleteOnly) "Tidak ada transaksi yang perlu dilengkapi pada hasil ini."
-                    else if (query.isNotBlank()) "Transaksi tidak ditemukan."
+            if (tab == MainTab.HOME) item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Transaksi terbaru", style = MaterialTheme.typography.titleMedium)
+                    TextButton(onClick = { incompleteOnly = false; onQueryChange(""); onTab(MainTab.HISTORY) }) {
+                        Text("Lihat semua")
+                    }
+                }
+            }
+            if (tab == MainTab.HOME || tab == MainTab.HISTORY) if (visibleTransactions.isEmpty()) {
+                item { Text(if (tab == MainTab.HISTORY && incompleteOnly) "Tidak ada transaksi yang perlu dilengkapi pada hasil ini."
+                    else if (tab == MainTab.HISTORY && query.isNotBlank()) "Transaksi tidak ditemukan."
                     else "Belum ada transaksi untuk bulan ini.", Modifier.padding(vertical = 24.dp)) }
             } else {
                 items(visibleTransactions, key = { it.transactionId }) { transaction ->
@@ -494,6 +530,8 @@ private fun SettingsScreen(
     onScreenProtection: (Boolean) -> Unit,
     onLockNow: () -> Unit,
     onData: () -> Unit,
+    onSignOut: () -> Unit,
+    bottomBar: @Composable () -> Unit,
 ) {
     var enableError by remember { mutableStateOf<String?>(null) }
     val timeoutChoices = listOf(
@@ -504,6 +542,7 @@ private fun SettingsScreen(
         1_800_000L to "30 menit",
     )
     Scaffold(
+        bottomBar = bottomBar,
         topBar = {
             TopAppBar(
                 title = { Text("Pengaturan") },
@@ -603,13 +642,28 @@ private fun SettingsScreen(
             item {
                 Text("Perubahan perlindungan layar berlaku langsung.")
             }
+            item { OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) { Text("Keluar akun") } }
         }
     }
 }
 
 @Composable
 private fun TransactionRow(transaction: LocalTransaction, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().testTag("transaction-${transaction.transactionId}").clickable(onClick = onClick)) {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val income = transaction.draft.type == "Pemasukan"
+    val expense = transaction.draft.type == "Pengeluaran"
+    val container = when {
+        income -> if (dark) Color(0xFF163D2C) else Color(0xFFE3F4E8)
+        expense -> if (dark) Color(0xFF46252A) else Color(0xFFFCE8E8)
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val foreground = when {
+        income -> if (dark) Color(0xFFB3E9C5) else Color(0xFF164A2A)
+        expense -> if (dark) Color(0xFFFFC5CA) else Color(0xFF78272D)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Card(Modifier.fillMaxWidth().testTag("transaction-${transaction.transactionId}").clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = container, contentColor = foreground)) {
         Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(transaction.draft.category, style = MaterialTheme.typography.titleMedium)
@@ -621,6 +675,7 @@ private fun TransactionRow(transaction: LocalTransaction, onClick: () -> Unit) {
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(formatIdr(transaction.draft.amountIdr), style = MaterialTheme.typography.titleMedium)
+                Text(transaction.draft.type.ifBlank { "Tipe belum diisi" }, style = MaterialTheme.typography.labelSmall)
                 if (transaction.syncState != SyncState.SYNCED) Text(transaction.syncState.name.lowercase())
             }
         }
