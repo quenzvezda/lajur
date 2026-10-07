@@ -5,7 +5,11 @@ namespace Lajur.Infrastructure.Finance;
 
 public sealed class WorkbookFinanceReportService(OpenXmlWorkbookStore workbookStore) : IFinanceReportService
 {
-    public async Task<YearReport?> GetYearReportAsync(Guid userId, int year, CancellationToken cancellationToken)
+    public async Task<YearReport?> GetYearReportAsync(
+        Guid userId,
+        int year,
+        DateOnly today,
+        CancellationToken cancellationToken)
     {
         WorkbookYearData data;
         try
@@ -38,8 +42,19 @@ public sealed class WorkbookFinanceReportService(OpenXmlWorkbookStore workbookSt
                 .ToArray(),
             data.Balances
                 .Select(balance => new MonthBalanceInputs(balance.OpeningBalanceIdr, balance.ActualBalanceIdr))
+                .ToArray(),
+            data.IncomeSources
+                .Select(sources => sources?
+                    .Select(source => new IncomeSourceInput(
+                        source.Label,
+                        source.PayoutDay,
+                        source.EstimateIdr,
+                        source.EstimateRecognized,
+                        source.IncomeCategory,
+                        source.PaidThresholdIdr))
+                    .ToArray())
                 .ToArray());
-        return FinanceReportCalculator.Calculate(snapshot);
+        return FinanceReportCalculator.Calculate(snapshot, today);
     }
 
     public async Task<IReadOnlyList<int>> ListYearsAsync(Guid userId, CancellationToken cancellationToken)

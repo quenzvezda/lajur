@@ -67,6 +67,7 @@ public static class WebViewerSetup
                 .RequireAuthenticatedUser()
                 .RequireClaim(UserIdClaim));
 
+        services.AddSingleton<ReportClock>();
         services.AddRazorPages(options =>
         {
             options.Conventions.AuthorizeFolder("/", Policy);

@@ -15,7 +15,7 @@ public sealed class FinanceReportCalculatorTests
     [Fact]
     public void Monthly_totals_match_rows_and_blank_payment_is_still_counted()
     {
-        var report = FinanceReportCalculator.Calculate(Snapshot(
+        var report = Calc(Snapshot(
         [
             Row(2026, 3, 1, "Pemasukan", "Gaji", 5_000_000, payment: "Bank"),
             Row(2026, 3, 2, "Pengeluaran", "Makan", 40_000, payment: ""),
@@ -35,7 +35,7 @@ public sealed class FinanceReportCalculatorTests
     [Fact]
     public void Category_pivot_contains_only_expense_rows_sorted_by_amount_and_sums_to_monthly_expense()
     {
-        var report = FinanceReportCalculator.Calculate(Snapshot(
+        var report = Calc(Snapshot(
         [
             Row(2026, 1, 3, "Pengeluaran", "Transport", 50_000),
             Row(2026, 1, 4, "Pengeluaran", "Makan", 30_000),
@@ -69,7 +69,7 @@ public sealed class FinanceReportCalculatorTests
         balances[0] = new MonthBalanceInputs(2_000_000, 2_500_000);
         balances[1] = new MonthBalanceInputs(1_000_000, 0);
         balances[2] = new MonthBalanceInputs(null, 900_000);
-        var report = FinanceReportCalculator.Calculate(Snapshot(
+        var report = Calc(Snapshot(
             [Row(2026, 1, 1, "Pemasukan", "Gaji", 1_000_000), Row(2026, 1, 2, "Pengeluaran", "Makan", 300_000)],
             balances));
 
@@ -85,7 +85,7 @@ public sealed class FinanceReportCalculatorTests
     [Fact]
     public void Rekap_uses_cumulative_net_and_filled_month_divisor()
     {
-        var report = FinanceReportCalculator.Calculate(Snapshot(
+        var report = Calc(Snapshot(
         [
             Row(2026, 1, 10, "Pemasukan", "Gaji", 1_000_000),
             Row(2026, 1, 11, "Pengeluaran", "Makan", 400_000),
@@ -123,7 +123,7 @@ public sealed class FinanceReportCalculatorTests
     [Fact]
     public void Empty_year_has_zero_totals_and_no_divide_by_zero()
     {
-        var report = FinanceReportCalculator.Calculate(Snapshot([]));
+        var report = Calc(Snapshot([]));
 
         Assert.Equal(0, report.FilledMonthCount);
         Assert.Equal(0, report.AverageExpensePerFilledMonthIdr);
@@ -134,13 +134,17 @@ public sealed class FinanceReportCalculatorTests
     [Fact]
     public void Leap_day_row_is_reported_in_february()
     {
-        var report = FinanceReportCalculator.Calculate(Snapshot(
+        var report = Calc(Snapshot(
             [Row(2028, 2, 29, "Pengeluaran", "Makan", 10_000)],
             year: 2028));
 
         Assert.Equal(new DateOnly(2028, 2, 29), Assert.Single(report.Months[1].Rows).Date);
         Assert.Equal(10_000, report.Months[1].ExpenseIdr);
     }
+
+    private static readonly DateOnly Today = new(2026, 12, 31);
+
+    private static YearReport Calc(WorkbookYearSnapshot snapshot) => FinanceReportCalculator.Calculate(snapshot, Today);
 
     private static WorkbookYearSnapshot Snapshot(
         IReadOnlyList<ReportRow> rows,

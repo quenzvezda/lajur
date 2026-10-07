@@ -195,7 +195,7 @@
     const name = `${MONTH_LONG[month.month - 1]} ${report.year}`;
     const tableKey = `m${month.month}`;
     const rows = month.rows.map((row, index) => ({ ...row, month: month.month, line: index + 1 }));
-    const table = transactionTable(tableKey, rows, { showMonth: false });
+    const table = transactionTable(tableKey, rows, { showMonth: false, exportName: MONTH_SHORT[month.month - 1] });
 
     const head = h('div', { class: 'view-head' },
       h('div', null,
@@ -230,7 +230,7 @@
       topExpenses(rows));
 
     const daily = panel('Pengeluaran harian & kumulatif', h('div', { class: 'chart-host' }), {
-      aside: legend([['expense', 'Harian'], ['line', 'Kumulatif'], ['budget', 'Total budget Master']])
+      aside: legend([['expense', 'Harian'], ['line', 'Kumulatif s.d. hari ini'], ['pace', 'Laju rata-rata bulanan'], ['budget', 'Total budget Master']])
     });
     const dailyHost = daily.querySelector('.chart-host');
     resizeHandlers.push(() => drawDailyChart(dailyHost, month));
@@ -241,9 +241,119 @@
         h('div', { class: 'split-main' }, panel('Tabel transaksi', table, { className: 'panel--table' })),
         h('aside', { class: 'split-side' }, side)),
       daily,
-      h('div', { class: 'unavailable-grid' },
-        unavailable('Proyeksi kas & income belum cair', 'Blok ini memakai input estimasi (sel kuning) dan TODAY() di Excel. Web belum memetakan rumusnya, jadi tidak ditampilkan agar tidak muncul angka palsu.'),
-        unavailable('Laju belanja & proyeksi akhir bulan', 'Membutuhkan aturan tanggal hari ini/zona waktu yang sama persis dengan workbook. Dijadwalkan untuk tahap berikutnya.')));
+      h('div', { class: 'two-col' },
+        projectionPanel(month),
+        h('div', { class: 'side-stack' }, pacePanel(month), comparisonPanel(month))));
+  }
+
+  // ---------- projection, pace and month-over-month (mirror sheet panels A, B and F) ----------
+  const todayLabel = () => {
+    const p = parseDate(report.today);
+    return `${DAY_SHORT[p.weekday]}, ${p.d} ${MONTH_LONG[p.m - 1]} ${p.y}`;
+  };
+  const money = (value) => (value === null || value === undefined ? '—' : rupiah(value));
+
+  function statusPill(status) {
+    const tone = status === 'sudah cair' || status === 'di bawah kebiasaan' ? 'is-income'
+      : status === 'di atas kebiasaan' ? 'is-expense'
+        : status === 'belum dipetakan' || status === 'isi estimasi dulu' ? 'is-warn' : null;
+    return h('span', { class: ['pill', tone], text: status });
+  }
+
+  function projectionPanel(month) {
+    const projection = month.projection;
+    if (!projection) {
+      return panel('Proyeksi kas bulan ini', unavailable('Blok proyeksi kas tidak ditemukan',
+        'Sheet bulan ini tidak memiliki blok "A. PROYEKSI KAS" dengan susunan template Lajur, jadi tidak dihitung.'));
+    }
+    const sources = h('div', { class: 'table-scroll' }, h('table', { class: 'grid grid--report' },
+      h('thead', null, h('tr', null, ['Sumber', 'Cair tgl', 'Estimasi', 'Aktual', 'Belum cair', 'Status']
+        .map((label, i) => h('th', { scope: 'col', class: i >= 1 && i <= 4 ? 'num' : null, text: label })))),
+      h('tbody', null, projection.sources.map((source) => h('tr', null,
+        h('th', { scope: 'row', title: source.incomeCategory ? `Kategori pemasukan: ${source.incomeCategory}` : 'Rumus Aktual tidak dikenali' }, source.label),
+        h('td', { class: 'num', text: source.payoutDay ?? '—' }),
+        h('td', { class: 'num', text: source.estimateIdr === null ? (source.mapped ? '0' : '—') : fmt(source.estimateIdr) }),
+        h('td', { class: 'num is-income', text: source.actualIdr === null ? '—' : fmt(source.actualIdr) }),
+        h('td', { class: 'num', text: source.remainingIdr === null ? '—' : fmt(source.remainingIdr) }),
+        h('td', null, statusPill(source.status))))),
+      h('tfoot', null, h('tr', null,
+        h('th', { text: 'TOTAL' }), h('th'),
+        h('th', { class: 'num', text: projection.estimateTotalIdr === null ? '—' : fmt(projection.estimateTotalIdr) }),
+        h('th', { class: 'num', text: projection.actualTotalIdr === null ? '—' : fmt(projection.actualTotalIdr) }),
+        h('th', { class: 'num', text: projection.remainingTotalIdr === null ? '—' : fmt(projection.remainingTotalIdr) }),
+        h('th')))));
+    const summary = h('dl', { class: 'facts' },
+      fact('Pemasukan tercatat', rupiah(projection.recordedIncomeIdr)),
+      fact('Belum cair', money(projection.remainingTotalIdr)),
+      fact('Proyeksi pemasukan', money(projection.projectedIncomeIdr)),
+      fact('Proyeksi pengeluaran', rupiah(projection.projectedExpenseIdr), 'Ekstrapolasi linear dari laju belanja'),
+      fact('Proyeksi selisih', projection.projectedNetIdr === null ? '—' : signedRupiah(projection.projectedNetIdr)),
+      fact('Proyeksi closing balance', projection.projectedClosingIdr === null ? '—' : rupiah(projection.projectedClosingIdr),
+        month.openingBalanceIdr === null ? 'Perlu opening balance' : 'Opening + proyeksi pemasukan − proyeksi pengeluaran'));
+    return panel('Proyeksi kas bulan ini', h('div', { class: 'stack' },
+      sources,
+      projection.complete ? null : h('p', { class: 'alert alert--warn', text: 'Ada baris yang rumusnya tidak dikenali ("belum dipetakan"), jadi total yang bergantung padanya tidak dihitung.' }),
+      h('h3', { class: 'subhead', text: 'Ringkasan proyeksi' }),
+      summary,
+      h('p', { class: 'muted small', text: `Estimasi & tanggal cair dibaca dari sel input di sheet. "Hari ini" = ${todayLabel()}.` })));
+  }
+
+  function fact(label, value, hint) {
+    return h('div', { class: 'fact', title: hint || null }, h('dt', { text: label }), h('dd', { text: value }));
+  }
+
+  function pacePanel(month) {
+    const pace = month.pace;
+    const ratio = pace.historicalMonthlyAverageIdr > 0 ? pace.projectedMonthEndIdr / pace.historicalMonthlyAverageIdr : null;
+    return panel('Laju belanja', h('div', { class: 'stack' },
+      h('div', { class: 'pace-head' },
+        h('div', null,
+          h('div', { class: 'muted small', text: 'Proyeksi akhir bulan' }),
+          h('div', { class: 'pace-value', text: rupiah(pace.projectedMonthEndIdr) })),
+        statusPill(pace.status)),
+      ratio === null ? null : h('div', { title: `${percent(ratio)} dari rata-rata bulanan` },
+        barCell(Math.min(1, ratio), ratio > 1 ? 'expense' : 'income'),
+        h('div', { class: 'muted small', text: `${percent(ratio, 0)} dari rata-rata bulanan (${rupiah(pace.historicalMonthlyAverageIdr)})` })),
+      h('dl', { class: 'facts' },
+        fact('Hari berjalan', `${pace.elapsedDays} dari ${pace.daysInMonth} hari`),
+        fact('Belanja s.d. hari ini', rupiah(pace.spentIdr),
+          'Seperti Excel (=D3): total pengeluaran di tabel bulan ini, termasuk baris bertanggal setelah hari ini'),
+        fact('Rata-rata per hari', rupiah(pace.averagePerDayIdr)),
+        fact('Rata-rata bulanan (histori)', rupiah(pace.historicalMonthlyAverageIdr), 'Rata-rata pengeluaran per bulan terisi, dari Rekap'),
+        fact('Total budget (Master)', rupiah(pace.totalMasterBudgetIdr)))));
+  }
+
+  function comparisonPanel(month) {
+    if (month.month === 1) {
+      return panel('Dibanding bulan lalu', h('p', { class: 'muted', text: 'Januari adalah bulan pertama, tidak ada pembanding.' }));
+    }
+    const prev = report.months[month.month - 2];
+    const avg = (m) => (m.transactionCount ? Math.round(m.expenseIdr / m.transactionCount) : 0);
+    const line = (label, before, now, invert) => {
+      const diff = now - before;
+      const pct = before ? diff / before : null;
+      const worse = invert ? diff > 0 : diff < 0;
+      return h('tr', null,
+        h('th', { scope: 'row', text: label }),
+        h('td', { class: 'num', text: fmt(before) }),
+        h('td', { class: 'num', text: fmt(now) }),
+        h('td', { class: ['num', diff !== 0 && (worse ? 'is-negative' : 'is-positive')], text: (diff > 0 ? '+' : '') + fmt(diff) }),
+        h('td', { class: 'num muted', text: pct === null ? '—' : percent(pct, 0) }));
+    };
+    const prevByCategory = new Map(prev.expenseByCategory.map((c) => [c.category, c.amountIdr]));
+    const top = month.expenseByCategory.slice(0, 5);
+    const headRow = (first) => h('thead', null, h('tr', null,
+      [first, MONTH_SHORT[month.month - 2], MONTH_SHORT[month.month - 1], 'Selisih', '%']
+        .map((label, i) => h('th', { scope: 'col', class: i ? 'num' : null, text: label }))));
+    return panel('Dibanding bulan lalu', h('div', { class: 'stack' },
+      h('div', { class: 'table-scroll' }, h('table', { class: 'grid grid--report' }, headRow('Indikator'),
+        h('tbody', null,
+          line('Pemasukan', prev.incomeIdr, month.incomeIdr, false),
+          line('Pengeluaran', prev.expenseIdr, month.expenseIdr, true),
+          line('Jumlah transaksi', prev.transactionCount, month.transactionCount, false),
+          line('Rata-rata per transaksi', avg(prev), avg(month), true)))),
+      top.length === 0 ? null : h('div', { class: 'table-scroll' }, h('table', { class: 'grid grid--report' }, headRow('5 kategori terbesar'),
+        h('tbody', null, top.map((c) => line(c.category, prevByCategory.get(c.category) || 0, c.amountIdr, true)))))));
   }
 
   function balanceItem(label, value, hint, tone) {
@@ -411,10 +521,12 @@
     const content = h('div', { class: 'tx-content' });
     const host = h('div', { class: 'tx' }, h('div', { class: 'tx-toolbar' }, search, toolbarExtras), content);
 
+    let visibleRows = rows;
     const draw = () => {
       if (search.value !== state.search) search.value = state.search;
       const filtered = sortRows(applyFilters(rows, state, columns), state, columns);
       const active = Object.keys(state.filters).length > 0 || state.search.trim() !== '';
+      visibleRows = filtered;
       toolbarExtras.replaceChildren(...toolbar(filtered.length));
       content.replaceChildren(grid(filtered), footer(filtered, active));
     };
@@ -430,6 +542,11 @@
         h('div', { class: 'chips' }, chips),
         h('div', { class: 'tx-toolbar-end' },
           h('span', { class: 'muted small', text: visible === rows.length ? `${rows.length} baris` : `${visible} dari ${rows.length} baris` }),
+          h('button', {
+            type: 'button', class: 'button button--ghost button--sm', disabled: visible === 0,
+            title: 'Unduh baris yang sedang tampil (sesuai filter & urutan) sebagai CSV',
+            text: 'Ekspor CSV', onclick: () => downloadCsv(visibleRows, options.exportName, visible !== rows.length)
+          }),
           hasAny ? h('button', { type: 'button', class: 'button button--ghost button--sm', text: 'Reset', onclick: () => { state.filters = {}; state.search = ''; state.sort = null; draw(); } }) : null)];
     };
 
@@ -492,6 +609,28 @@
 
     draw();
     return host;
+  }
+
+  // CSV for Excel (Indonesian locale uses ';'), UTF-8 with BOM. Built in the browser from rows already
+  // on the page; nothing is requested from the server. Cells that could be read as formulas are quoted
+  // with a leading apostrophe to prevent CSV formula injection.
+  function downloadCsv(rows, name, filtered) {
+    const cell = (value) => {
+      let text = value === null || value === undefined ? '' : String(value);
+      if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+      return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const header = ['Bulan', 'Tanggal', 'Tipe', 'Pembayaran', 'Kategori', 'Jumlah (Rp)', 'Keterangan'];
+    const lines = [header.join(';')].concat(rows.map((row) => [
+      MONTH_SHORT[row.month - 1], row.date, row.type, row.paymentMethod, row.category, row.amountIdr, row.description
+    ].map(cell).join(';')));
+    const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = h('a', { href: url, download: `Lajur_${report.year}_${name}${filtered ? '_terfilter' : ''}.csv` });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function describeFilter(column, filter) {
@@ -661,6 +800,9 @@
     const budget = report.categories
       .filter((c) => c.kind === EXPENSE && c.monthlyBudgetIdr)
       .reduce((sum, c) => sum + c.monthlyBudgetIdr, 0);
+    // Like the workbook chart: cumulative stops at "hari berjalan"; pace = monthly average spread per day.
+    const elapsed = month.pace ? month.pace.elapsedDays : days;
+    const habit = month.pace ? month.pace.historicalMonthlyAverageIdr : 0;
 
     const { svg, width, height } = chartFrame(host, 260);
     svg.setAttribute('aria-label', `Pengeluaran harian dan kumulatif ${MONTH_LONG[month.month - 1]}`);
@@ -668,7 +810,7 @@
     // Only bring the budget line into scale when it is close enough to be informative.
     const spent = cumulative[days - 1] || 0;
     const budgetInScale = budget > 0 && budget <= Math.max(spent, 1) * 1.6;
-    const max = Math.max(1, spent, budgetInScale ? budget : 0);
+    const max = Math.max(1, spent, budgetInScale ? budget : 0, habit);
     const ticks = niceTicks(0, max);
     const top = ticks[ticks.length - 1];
     const plotW = width - margin.left - margin.right;
@@ -689,8 +831,13 @@
       svg.append(h('svg:text', { class: 'axis-label', x: width - margin.right, y: 11, 'text-anchor': 'end' },
         `Total budget Master ${rupiah(budget)} · terpakai ${percent(spent / budget)}`));
     }
-    const path = cumulative.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-    svg.append(h('svg:path', { class: 'mark-line', d: path }));
+    if (habit > 0) {
+      svg.append(h('svg:path', { class: 'mark-pace', d: `M${x(0).toFixed(1)},${y(habit / days).toFixed(1)} L${x(days - 1).toFixed(1)},${y(habit).toFixed(1)}` }));
+    }
+    if (elapsed > 0) {
+      const path = cumulative.slice(0, elapsed).map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+      svg.append(h('svg:path', { class: 'mark-line', d: path }));
+    }
 
     const labelEvery = days > 20 && width < 640 ? 5 : days > 20 ? 2 : 1;
     for (let i = 0; i < days; i++) {
@@ -703,11 +850,12 @@
       svg.append(h('svg:rect', {
         class: 'hit', x: margin.left + band * i, y: margin.top, width: band, height: plotH,
         onmousemove: (event) => {
-          marker.setAttribute('cx', x(i)); marker.setAttribute('cy', y(cumulative[i]));
+          marker.setAttribute('cx', i < elapsed ? x(i) : -10); marker.setAttribute('cy', y(cumulative[i]));
           showTooltip(event, [
             h('strong', { text: `${formatDate(`${report.year}-${String(month.month).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`)}` }),
             `Harian: ${rupiah(daily[i])}`,
-            `Kumulatif: ${rupiah(cumulative[i])}`,
+            i < elapsed ? `Kumulatif: ${rupiah(cumulative[i])}` : 'Setelah hari ini',
+            habit > 0 ? `Laju rata-rata: ${rupiah(Math.round(habit / days * (i + 1)))}` : '',
             budget > 0 ? `Budget terpakai: ${percent(cumulative[i] / budget)}` : ''
           ].filter(Boolean));
         },
@@ -925,7 +1073,7 @@
       h('div', { class: 'view-head' }, h('div', null,
         h('h1', { text: `Semua transaksi ${report.year}` }),
         h('p', { class: 'muted', text: 'Gabungan 12 tabel bulanan. Gunakan ▾ di judul kolom untuk filter seperti AutoFilter Excel.' }))),
-      panel('Tabel transaksi setahun', transactionTable('all', allRows, { showMonth: true }), { className: 'panel--table' }));
+      panel('Tabel transaksi setahun', transactionTable('all', allRows, { showMonth: true, exportName: 'Semua' }), { className: 'panel--table' }));
   }
 
   // ---------- master ----------

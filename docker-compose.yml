@@ -11,6 +11,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 8080
       Lajur__Storage__RootPath: /srv/lajur
+      # The port is bound to loopback, so only the host reverse proxy reaches the container through the
+      # Docker gateway. Trust X-Forwarded-For/Proto from that network for real client IPs and https.
+      Lajur__ReverseProxy__TrustedNetworks__0: ${LAJUR_TRUSTED_PROXY_NETWORK:-172.16.0.0/12}
     ports:
       - "127.0.0.1:${LAJUR_API_PORT:-8080}:8080"
     volumes:

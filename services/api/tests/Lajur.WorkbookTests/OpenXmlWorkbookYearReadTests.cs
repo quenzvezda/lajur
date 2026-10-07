@@ -17,6 +17,37 @@ public sealed class OpenXmlWorkbookYearReadTests
     }
 
     [Fact]
+    public void ReadIncomeSourceInputs_MapsKnownFormulaShapes()
+    {
+        var sources = new OpenXmlWorkbookReader().ReadIncomeSourceInputs(FixturePath, 1);
+
+        Assert.NotNull(sources);
+        Assert.Collection(
+            sources,
+            meal =>
+            {
+                // =$M$10*$M$11 with an empty working-days cell: recognized, counts as 0 like Excel.
+                Assert.Equal(10, meal.PayoutDay);
+                Assert.Null(meal.EstimateIdr);
+                Assert.True(meal.EstimateRecognized);
+                Assert.Equal("Uang Makan", meal.IncomeCategory);
+                Assert.Equal(0, meal.PaidThresholdIdr);
+            },
+            salary =>
+            {
+                Assert.Equal(5_000_000, salary.EstimateIdr);
+                Assert.Equal("Gaji", salary.IncomeCategory);
+                Assert.Equal(1_000_000, salary.PaidThresholdIdr);
+            },
+            freelance =>
+            {
+                Assert.Equal(20, freelance.PayoutDay);
+                Assert.Equal(1_000_000, freelance.EstimateIdr);
+                Assert.Equal("Freelance", freelance.IncomeCategory);
+            });
+    }
+
+    [Fact]
     public async Task ReadYearAsync_ReturnsAllMonthsAndDoesNotModifyTheWorkbook()
     {
         var root = Directory.CreateTempSubdirectory("lajur-year-read-");
@@ -38,6 +69,13 @@ public sealed class OpenXmlWorkbookYearReadTests
             Assert.All(data.Months.SelectMany(rows => rows), row => Assert.Equal(2026, row.Date.Year));
             Assert.Equal(hashBefore, SHA256.HashData(await File.ReadAllBytesAsync(path)));
             Assert.Equal(writeTimeBefore, File.GetLastWriteTimeUtc(path));
+            Assert.All(data.IncomeSources, Assert.NotNull);
+
+            var store = new OpenXmlWorkbookStore(root.FullName);
+            var first = await store.ReadYearAsync(key);
+            Assert.Same(first, await store.ReadYearAsync(key));
+            File.SetLastWriteTimeUtc(path, writeTimeBefore.AddMinutes(1));
+            Assert.NotSame(first, await store.ReadYearAsync(key));
         }
         finally
         {

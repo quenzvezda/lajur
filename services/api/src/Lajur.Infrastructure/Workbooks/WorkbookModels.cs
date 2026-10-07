@@ -62,7 +62,8 @@ public sealed record WorkbookYearData(
     DateTimeOffset LastModifiedAtUtc,
     WorkbookMasterData Master,
     IReadOnlyList<IReadOnlyList<WorkbookTransactionRow>> Months,
-    IReadOnlyList<WorkbookMonthBalanceInputs> Balances);
+    IReadOnlyList<WorkbookMonthBalanceInputs> Balances,
+    IReadOnlyList<IReadOnlyList<WorkbookIncomeSourceInput>?> IncomeSources);
 
 public sealed record StoredWorkbookImportResult(
     WorkbookMigrationResult Migration,

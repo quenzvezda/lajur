@@ -10,7 +10,7 @@ public static class FinanceReportCalculator
     public const string IncomeType = "Pemasukan";
     public const string ExpenseType = "Pengeluaran";
 
-    public static YearReport Calculate(WorkbookYearSnapshot snapshot)
+    public static YearReport Calculate(WorkbookYearSnapshot snapshot, DateOnly today)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         if (snapshot.Months.Count != 12 || snapshot.Balances.Count != 12)
@@ -72,9 +72,35 @@ public static class FinanceReportCalculator
             var totalIncome = months.Sum(month => month.IncomeIdr);
             var totalExpense = months.Sum(month => month.ExpenseIdr);
             var filledMonths = months.Count(month => month.ExpenseIdr > 0);
+            var historicalAverage = Average(totalExpense, filledMonths);
+
+            // Excel's "Total budget (Master)" sums the whole budget column, not only expense categories.
+            var totalBudget = snapshot.Categories.Sum(category => category.MonthlyBudgetIdr ?? 0);
+            for (var index = 0; index < 12; index++)
+            {
+                var month = months[index];
+                var pace = MonthProjectionCalculator.Pace(
+                    snapshot.Year,
+                    month.Month,
+                    month.ExpenseIdr,
+                    today,
+                    historicalAverage,
+                    totalBudget);
+                var projection = MonthProjectionCalculator.Cash(
+                    snapshot.Year,
+                    month.Month,
+                    snapshot.IncomeSources?.ElementAtOrDefault(index),
+                    month.Rows,
+                    month.IncomeIdr,
+                    month.OpeningBalanceIdr,
+                    pace,
+                    today);
+                months[index] = month with { Pace = pace, Projection = projection };
+            }
 
             return new YearReport(
                 snapshot.Year,
+                today,
                 snapshot.LastModifiedAtUtc,
                 snapshot.TransactionTypes,
                 snapshot.PaymentMethods,
@@ -86,7 +112,7 @@ public static class FinanceReportCalculator
                 SavingRate(totalIncome, totalExpense),
                 months.Sum(month => month.TransactionCount),
                 filledMonths,
-                Average(totalExpense, filledMonths),
+                historicalAverage,
                 ExpenseMatrix(snapshot, filledMonths),
                 ExpenseByPayment(snapshot));
         }

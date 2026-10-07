@@ -98,6 +98,12 @@ public sealed partial class WebViewerTests
         Assert.Equal(summary.ExpenseIdr, january.GetProperty("expenseIdr").GetInt64());
         Assert.Equal(summary.TransactionCount, january.GetProperty("transactionCount").GetInt32());
         Assert.Equal(summary.TransactionCount, january.GetProperty("rows").GetArrayLength());
+        Assert.Equal(summary.ExpenseIdr, january.GetProperty("pace").GetProperty("spentIdr").GetInt64());
+        var projection = january.GetProperty("projection");
+        Assert.Equal(3, projection.GetProperty("sources").GetArrayLength());
+        Assert.Equal(summary.IncomeIdr, projection.GetProperty("recordedIncomeIdr").GetInt64());
+        Assert.True(projection.GetProperty("complete").GetBoolean());
+        Assert.Equal(JsonValueKind.String, report.RootElement.GetProperty("today").ValueKind);
         Assert.Equal(hashBefore, SHA256.HashData(await File.ReadAllBytesAsync(workbookPath)));
     }
 

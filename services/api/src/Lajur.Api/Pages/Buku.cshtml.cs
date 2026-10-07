@@ -12,7 +12,7 @@ namespace Lajur.Api.Pages;
 /// </summary>
 public sealed class BukuModel(
     IFinanceReportService reports,
-    TimeProvider timeProvider,
+    ReportClock clock,
     ILogger<BukuModel> logger) : PageModel
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -39,7 +39,7 @@ public sealed class BukuModel(
                 return Page();
             }
 
-            var currentYear = timeProvider.GetLocalNow().Year;
+            var currentYear = clock.Today().Year;
             return RedirectToPage(new { year = Years.Contains(currentYear) ? currentYear : Years[^1] });
         }
 
@@ -53,7 +53,7 @@ public sealed class BukuModel(
 
         try
         {
-            Report = await reports.GetYearReportAsync(userId, year.Value, cancellationToken);
+            Report = await reports.GetYearReportAsync(userId, year.Value, clock.Today(), cancellationToken);
         }
         catch (InvalidDataException exception)
         {

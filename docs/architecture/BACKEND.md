@@ -193,3 +193,8 @@ Readiness checks (implemented):
 
 It never touches a real workbook. Template presence is not part of readiness because a fresh
 deployment may legitimately run without one until the operator installs it.
+
+Web-viewer report notes: `ReportClock` supplies the owner's local date for TODAY()-based panels
+(`Lajur:Reports:TimeZone`, default `Asia/Jakarta`, fixed UTC+7 fallback when tzdata is absent).
+`OpenXmlWorkbookStore` caches one parsed year per workbook keyed by file write time and length,
+checked under the per-workbook lock; any write produces a new stamp, so a stale year is never served.

@@ -86,6 +86,15 @@ p { margin: 0; }
 .is-income { color: var(--income); }
 .is-expense { color: var(--expense); }
 .is-negative { color: var(--expense); }
+.is-positive { color: var(--income); }
+.stack { display: grid; gap: 12px; min-width: 0; }
+.subhead { font-size: .8rem; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 16px; }
+.fact { min-width: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.fact dt { color: var(--muted); font-size: .74rem; font-weight: 600; }
+.fact dd { margin: 2px 0 0; font-weight: 650; overflow-wrap: anywhere; }
+.pace-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pace-value { font-size: 1.35rem; font-weight: 700; }
 
 /* ---------- buttons, inputs, badges ---------- */
 .button {
@@ -125,9 +134,12 @@ p { margin: 0; }
 }
 .pill.is-income { background: var(--income-soft); color: var(--income); }
 .pill.is-expense { background: var(--expense-soft); color: var(--expense); }
+.grid td .pill { white-space: normal; }
+.pill.is-warn { background: var(--warn-soft); color: var(--warn); }
 .pill--sm { font-size: .68rem; padding: 0 .4rem; margin-left: .4rem; }
 .alert { padding: .65rem .8rem; border-radius: var(--radius-sm); }
 .alert--error { background: var(--expense-soft); color: var(--expense); }
+.alert--warn { background: var(--warn-soft); color: var(--warn); font-size: .85rem; }
 
 /* ---------- login ---------- */
 .login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
@@ -385,6 +397,7 @@ td.is-under { color: var(--income); }
 .chart .mark-line { fill: none; stroke: var(--line); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart .mark-point { fill: var(--surface); stroke: var(--line); stroke-width: 2; }
 .chart .mark-dot { fill: var(--line); }
+.chart .mark-pace { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 2 4; }
 .chart .mark-budget { stroke: var(--budget); stroke-width: 1.5; stroke-dasharray: 6 4; }
 .chart .hit { fill: transparent; }
 .chart .hit:hover { fill: rgba(127, 127, 127, .08); }
@@ -395,6 +408,7 @@ td.is-under { color: var(--income); }
 .legend-swatch--income { background: var(--income-mark); }
 .legend-swatch--expense { background: var(--expense-mark); }
 .legend-swatch--line { height: 3px; border-radius: 2px; background: var(--line); }
+.legend-swatch--pace { height: 0; border-top: 2px dotted var(--muted); border-radius: 0; }
 .legend-swatch--budget { height: 0; border-top: 2px dashed var(--budget); border-radius: 0; }
 
 .tooltip {

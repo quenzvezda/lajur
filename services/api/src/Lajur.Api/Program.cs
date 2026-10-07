@@ -105,6 +105,7 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
     });
 builder.Services.AddAuthorization();
 builder.Services.AddLajurWebViewer(builder.Configuration, builder.Environment);
+builder.Services.AddLajurReverseProxy(builder.Configuration);
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -171,6 +172,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseLajurWebSecurityHeaders();

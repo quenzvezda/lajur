@@ -14,6 +14,18 @@ public sealed record ReportCategory(string Name, string Kind, long? MonthlyBudge
 /// <summary>Manual balance inputs on a monthly sheet. Null means the cell is empty or not recognized.</summary>
 public sealed record MonthBalanceInputs(long? OpeningBalanceIdr, long? ActualBalanceIdr);
 
+/// <summary>
+/// One income source of the monthly cash-projection block. <see cref="IncomeCategory"/> or
+/// <see cref="PaidThresholdIdr"/> is null when the workbook formula shape is not recognized.
+/// </summary>
+public sealed record IncomeSourceInput(
+    string Label,
+    int? PayoutDay,
+    long? EstimateIdr,
+    bool EstimateRecognized,
+    string? IncomeCategory,
+    long? PaidThresholdIdr);
+
 /// <summary>Everything a report needs, read from one workbook revision under the workbook lock.</summary>
 public sealed record WorkbookYearSnapshot(
     int Year,
@@ -22,7 +34,42 @@ public sealed record WorkbookYearSnapshot(
     IReadOnlyList<string> PaymentMethods,
     IReadOnlyList<ReportCategory> Categories,
     IReadOnlyList<IReadOnlyList<ReportRow>> Months,
-    IReadOnlyList<MonthBalanceInputs> Balances);
+    IReadOnlyList<MonthBalanceInputs> Balances,
+    IReadOnlyList<IReadOnlyList<IncomeSourceInput>?>? IncomeSources = null);
+
+/// <summary>Panel "B. LAJU BELANJA": linear extrapolation of this month's spending.</summary>
+public sealed record SpendingPace(
+    int ElapsedDays,
+    int DaysInMonth,
+    long SpentIdr,
+    long AveragePerDayIdr,
+    long ProjectedMonthEndIdr,
+    long HistoricalMonthlyAverageIdr,
+    long TotalMasterBudgetIdr,
+    string Status);
+
+public sealed record IncomeSourceProjection(
+    string Label,
+    int? PayoutDay,
+    long? EstimateIdr,
+    string? IncomeCategory,
+    long? ActualIdr,
+    long? RemainingIdr,
+    string Status,
+    bool Mapped);
+
+/// <summary>Panel "A. PROYEKSI KAS" plus "Ringkasan proyeksi". Null totals mean an unmapped input.</summary>
+public sealed record CashProjection(
+    IReadOnlyList<IncomeSourceProjection> Sources,
+    long? EstimateTotalIdr,
+    long? ActualTotalIdr,
+    long? RemainingTotalIdr,
+    long RecordedIncomeIdr,
+    long? ProjectedIncomeIdr,
+    long ProjectedExpenseIdr,
+    long? ProjectedNetIdr,
+    long? ProjectedClosingIdr,
+    bool Complete);
 
 public sealed record CategoryAmount(string Category, long AmountIdr, int TransactionCount, long? MonthlyBudgetIdr);
 
@@ -41,7 +88,9 @@ public sealed record MonthReport(
     long? ActualBalanceIdr,
     long? BalanceDifferenceIdr,
     IReadOnlyList<CategoryAmount> ExpenseByCategory,
-    IReadOnlyList<ReportRow> Rows);
+    IReadOnlyList<ReportRow> Rows,
+    SpendingPace? Pace = null,
+    CashProjection? Projection = null);
 
 public sealed record CategoryYearRow(
     string Category,
@@ -53,6 +102,7 @@ public sealed record CategoryYearRow(
 
 public sealed record YearReport(
     int Year,
+    DateOnly Today,
     DateTimeOffset LastModifiedAtUtc,
     IReadOnlyList<string> TransactionTypes,
     IReadOnlyList<string> PaymentMethods,
@@ -71,7 +121,8 @@ public sealed record YearReport(
 public interface IFinanceReportService
 {
     /// <summary>Returns null when the user has no workbook for the year.</summary>
-    Task<YearReport?> GetYearReportAsync(Guid userId, int year, CancellationToken cancellationToken);
+    /// <param name="today">The user's local date; drives "hari berjalan" like Excel's TODAY().</param>
+    Task<YearReport?> GetYearReportAsync(Guid userId, int year, DateOnly today, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<int>> ListYearsAsync(Guid userId, CancellationToken cancellationToken);
 }

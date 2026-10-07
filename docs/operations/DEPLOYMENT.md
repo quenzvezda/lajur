@@ -50,6 +50,29 @@ Container replacement must not remove data/session keys. Every mounted directory
 `templates` must be writable by the container user (`APP_UID`, 1654 in the .NET images);
 `/health/ready` fails when one is not.
 
+## 3a. Reverse proxy and forwarded headers
+
+The API trusts `X-Forwarded-For`/`X-Forwarded-Proto` only from loopback and from the networks in
+`Lajur:ReverseProxy:TrustedNetworks` (compose: `LAJUR_TRUSTED_PROXY_NETWORK`, default
+`172.16.0.0/12`, the Docker bridge range the host Nginx reaches the loopback-bound port through).
+This gives per-client login rate limits instead of one shared limit for everyone behind the proxy,
+and the `https` scheme the browser cookie (`__Host-`, `Secure`) requires.
+
+Minimal host Nginx location (TLS/Certbot config stays as already managed on the VPS):
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 30m;   # workbook uploads
+}
+```
+
+Browser login to the web viewer requires HTTPS; plain `http://localhost` works only on the
+machine itself.
+
 ## 4. GitHub Actions
 
 Recommended pipeline:

@@ -5,6 +5,7 @@ namespace Lajur.Infrastructure.Workbooks;
 public sealed class OpenXmlWorkbookStore
 {
     private static readonly ConcurrentDictionary<WorkbookKey, SemaphoreSlim> Locks = new();
+    private readonly ConcurrentDictionary<WorkbookKey, (DateTime WrittenAtUtc, long Length, WorkbookYearData Data)> yearCache = new();
     private readonly Func<WorkbookKey, string> workbookPathResolver;
     private readonly Func<WorkbookKey, string> backupDirectoryResolver;
     private readonly TimeProvider timeProvider;
@@ -278,9 +279,11 @@ public sealed class OpenXmlWorkbookStore
         ReadAsync(key, (reader, path) => reader.ReadMonthlyTransactions(path, month), cancellationToken);
 
     /// <summary>
-    /// Reads Master, all twelve monthly tables and balance inputs from a single workbook revision.
-    /// Holding the per-workbook lock for the whole read keeps totals, tables and charts consistent
-    /// while Android writes are queued behind it. Never mutates the workbook.
+    /// Reads Master, all twelve monthly tables, balance inputs and cash-projection inputs from a single
+    /// workbook revision. Holding the per-workbook lock for the whole read keeps totals, tables and
+    /// charts consistent while Android writes are queued behind it. Never mutates the workbook.
+    /// The parsed result is reused until the file's write time or length changes (checked under the
+    /// same lock), because a full read opens the package dozens of times.
     /// </summary>
     public Task<WorkbookYearData> ReadYearAsync(
         WorkbookKey key,
@@ -289,17 +292,34 @@ public sealed class OpenXmlWorkbookStore
             key,
             (reader, path) =>
             {
-                var lastModified = new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
+                var file = new FileInfo(path);
+                var stamp = (file.LastWriteTimeUtc, file.Length);
+                if (yearCache.TryGetValue(key, out var cached)
+                    && cached.WrittenAtUtc == stamp.LastWriteTimeUtc
+                    && cached.Length == stamp.Length)
+                {
+                    return cached.Data;
+                }
+
                 var master = reader.ReadMasterData(path, key.Year);
                 var months = new IReadOnlyList<WorkbookTransactionRow>[12];
                 var balances = new WorkbookMonthBalanceInputs[12];
+                var incomeSources = new IReadOnlyList<WorkbookIncomeSourceInput>?[12];
                 for (var month = 1; month <= 12; month++)
                 {
                     months[month - 1] = reader.ReadMonthlyTransactions(path, month);
                     balances[month - 1] = reader.ReadMonthBalanceInputs(path, month);
+                    incomeSources[month - 1] = reader.ReadIncomeSourceInputs(path, month);
                 }
 
-                return new WorkbookYearData(lastModified, master, months, balances);
+                var data = new WorkbookYearData(
+                    new DateTimeOffset(stamp.LastWriteTimeUtc, TimeSpan.Zero),
+                    master,
+                    months,
+                    balances,
+                    incomeSources);
+                yearCache[key] = (stamp.LastWriteTimeUtc, stamp.Length, data);
+                return data;
             },
             cancellationToken);
 
