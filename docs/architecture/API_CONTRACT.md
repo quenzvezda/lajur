@@ -253,6 +253,28 @@ revision 1. Existing metadata is reconciled by content hash first and row locati
 second. One `SYSTEM_MIGRATION` audit summarizes an import instead of fabricating a
 historical CREATE event for every legacy row.
 
+Before year detection and migration, an import preflight checks every non-blank
+row of the twelve monthly tables with the migration's own rules and reports all
+problems at once (`422`, code `workbook_import_invalid`). `detail` is an
+Indonesian, user-facing list (first 25 lines) that Android shows as-is; the
+`issues` extension carries the full machine-readable list:
+
+```json
+{
+  "status": 422,
+  "code": "workbook_import_invalid",
+  "detail": "Workbook belum bisa diimpor: 1 baris perlu diperbaiki di Excel, lalu impor ulang.
+• Sep baris 24 (kolom D): Kategori 'Lainnya' terdaftar sebagai Pemasukan di Master, tetapi baris ini bertipe Pengeluaran.",
+  "issues": [
+    { "sheet": "Sep", "row": 24, "column": "D", "cell": "D24", "message": "Kategori 'Lainnya' terdaftar sebagai Pemasukan di Master, tetapi baris ini bertipe Pengeluaran." }
+  ]
+}
+```
+
+Issue messages never contain amounts or descriptions. Structural problems (missing
+sheet/table/header, broken date helpers, conflicting year) are also reported as
+`workbook_import_invalid` with a single explanatory `detail`.
+
 ### `GET /workbooks/{year}/export`
 
 Downloads actual `.xlsm`.
@@ -284,7 +306,10 @@ Examples:
 - `409` revision or transaction-ID conflict;
 - `422` workbook/domain validation error;
 - `429` login rate limit;
-- `503` workbook temporarily unavailable/locked only if waiting policy is exhausted.
+- `503` `workbook_unavailable`: the workbook is busy (file contention); retrying later can help;
+- `503` `server_storage_unavailable`: a server storage area (for example import staging) is
+  read-only, missing, full or not permitted. This is server configuration, not the user's
+  workbook, and retrying does not help; readiness (`/health/ready`) fails at the same time.
 
 Problem body should contain stable machine code, e.g.:
 

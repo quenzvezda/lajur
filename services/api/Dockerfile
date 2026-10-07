@@ -23,7 +23,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /srv/lajur/data /srv/lajur/backups /srv/lajur/templates /srv/lajur/auth /srv/lajur/keys \
+    && mkdir -p /srv/lajur/data /srv/lajur/backups /srv/lajur/templates /srv/lajur/auth /srv/lajur/keys /srv/lajur/staging \
     && chown -R "${APP_UID}:${APP_UID}" /srv/lajur
 
 WORKDIR /app

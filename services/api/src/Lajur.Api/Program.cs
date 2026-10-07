@@ -151,7 +151,8 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddHealthChecks()
-    .AddCheck<AuthDatabaseHealthCheck>("auth-database", tags: ["ready"]);
+    .AddCheck<AuthDatabaseHealthCheck>("auth-database", tags: ["ready"])
+    .AddCheck<StorageHealthCheck>("storage", tags: ["ready"]);
 
 var app = builder.Build();
 

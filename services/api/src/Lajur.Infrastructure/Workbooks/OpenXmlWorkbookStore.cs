@@ -137,12 +137,14 @@ public sealed class OpenXmlWorkbookStore
 
         try
         {
+            ThrowIfImportRowsInvalid(stagedPath, key.Year);
             var detectedYear = new OpenXmlWorkbookReader().DetectWorkbookYear(stagedPath);
             if (detectedYear != key.Year)
             {
                 throw new WorkbookImportValidationException(
-                    $"Workbook year {detectedYear} does not match confirmed year {key.Year}.");
+                    $"Workbook berisi tahun {detectedYear}, bukan tahun {key.Year} yang dikonfirmasi.");
             }
+
         }
         catch (WorkbookImportValidationException)
         {
@@ -150,7 +152,9 @@ public sealed class OpenXmlWorkbookStore
         }
         catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException)
         {
-            throw new WorkbookImportValidationException("The workbook year could not be validated.", exception);
+            throw new WorkbookImportValidationException(
+                $"Struktur workbook tidak sesuai kontrak Lajur: {exception.Message}",
+                exception);
         }
 
         var gate = Locks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
@@ -206,11 +210,27 @@ public sealed class OpenXmlWorkbookStore
         }
         catch (InvalidDataException exception)
         {
-            throw new WorkbookImportValidationException("The workbook does not satisfy the Lajur contract.", exception);
+            throw new WorkbookImportValidationException(
+                $"Workbook tidak sesuai kontrak Lajur: {exception.Message}",
+                exception);
         }
         finally
         {
             gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Import preflight: reports every invalid monthly row (sheet, row, column, reason) at once. Must
+    /// run before year detection and migration, which both stop at the first invalid row.
+    /// </summary>
+    public static void ThrowIfImportRowsInvalid(string stagedPath, int? expectedYear)
+    {
+        var master = new OpenXmlWorkbookReader().ReadMasterData(stagedPath, expectedYear ?? 1900);
+        var issues = new OpenXmlWorkbookEditor(stagedPath, master).CollectImportIssues(expectedYear);
+        if (issues.Count > 0)
+        {
+            throw new WorkbookImportValidationException(issues);
         }
     }
 

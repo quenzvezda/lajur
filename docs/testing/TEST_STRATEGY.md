@@ -165,6 +165,14 @@ transaction. Manual debug scans can explicitly save the same JSON report for
 ADB inspection; report contents never enter ordinary logcat. This is extraction
 acceptance, not evidence that the editor/outbox/API/workbook save path passed.
 
+## 3a. Container smoke test
+
+`services/api/tests/container-smoke.sh <image> <fixture>` runs in the CI `container` job. It
+starts the image like `docker-compose.yml` (read-only root, dropped capabilities, bind mounts),
+creates an account, logs in, imports the sanitized fixture, reads a summary and loads the web
+login page. A second container without the `staging` mount must fail readiness, guarding the
+2026-10-07 import regression. It is deterministic and needs no emulator or browser.
+
 ## 4. CI philosophy
 
 CI should fail for deterministic regressions.

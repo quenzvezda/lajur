@@ -185,10 +185,11 @@ Suggested:
 - `/health/live`
 - `/health/ready`
 
-Readiness can check:
+Readiness checks (implemented):
 
 - auth DB accessible;
-- required storage directories writable;
-- template exists.
+- `data`, `backups`, `staging`, `keys` and `auth` under the storage root are writable
+  (a probe file is created and deleted; a read-only or missing Docker mount fails readiness).
 
-It should not mutate a real workbook.
+It never touches a real workbook. Template presence is not part of readiness because a fresh
+deployment may legitimately run without one until the operator installs it.

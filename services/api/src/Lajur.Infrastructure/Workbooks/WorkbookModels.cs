@@ -94,5 +94,31 @@ public sealed class WorkbookTemplateUnavailableException(string message) : Excep
 public sealed class WorkbookUploadTooLargeException(long maximumBytes)
     : Exception($"The workbook upload exceeds the {maximumBytes} byte limit.");
 
-public sealed class WorkbookImportValidationException(string message, Exception? innerException = null)
-    : Exception(message, innerException);
+public sealed class WorkbookImportValidationException(
+    string message,
+    Exception? innerException = null,
+    IReadOnlyList<WorkbookImportIssue>? issues = null)
+    : Exception(message, innerException)
+{
+    public WorkbookImportValidationException(IReadOnlyList<WorkbookImportIssue> issues)
+        : this(DescribeIssues(issues), null, issues)
+    {
+    }
+
+    /// <summary>Row-level problems found by the import preflight; empty for structural failures.</summary>
+    public IReadOnlyList<WorkbookImportIssue> Issues { get; } = issues ?? [];
+
+    public const int MaximumListedIssues = 25;
+
+    private static string DescribeIssues(IReadOnlyList<WorkbookImportIssue> issues)
+    {
+        var rows = issues.Select(issue => (issue.Sheet, issue.Row)).Distinct().Count();
+        var lines = issues.Take(MaximumListedIssues)
+            .Select(issue => $"• {issue.Sheet} baris {issue.Row} (kolom {issue.Column}): {issue.Message}");
+        var more = issues.Count > MaximumListedIssues
+            ? $"\n…dan {issues.Count - MaximumListedIssues} masalah lain."
+            : string.Empty;
+        return $"Workbook belum bisa diimpor: {rows} baris perlu diperbaiki di Excel, lalu impor ulang.\n"
+               + string.Join("\n", lines) + more;
+    }
+}

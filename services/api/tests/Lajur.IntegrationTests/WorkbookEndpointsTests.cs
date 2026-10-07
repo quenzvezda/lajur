@@ -141,7 +141,7 @@ public sealed class WorkbookEndpointsTests
         using var invalid = await ImportAsync(client, templatePath, 2026,
             replaceExisting: true, confirmNoPendingChanges: true);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, invalid.StatusCode);
-        Assert.Equal("workbook_validation_failed", await ReadProblemCodeAsync(invalid));
+        Assert.Equal("workbook_import_invalid", await ReadProblemCodeAsync(invalid));
         using var exportAfter = await client.GetAsync("/api/v1/workbooks/2026/export");
         exportAfter.EnsureSuccessStatusCode();
         Assert.Equal(canonicalBefore, await exportAfter.Content.ReadAsByteArrayAsync());
@@ -205,6 +205,63 @@ public sealed class WorkbookEndpointsTests
             replacement.BackupFileName);
         Assert.True(File.Exists(backupPath));
         Assert.Equal(activeBefore, await File.ReadAllBytesAsync(backupPath));
+    }
+
+    [Fact]
+    public async Task Import_with_invalid_rows_lists_every_issue_with_its_location()
+    {
+        using var factory = new LajurApiFactory();
+        await CreateAccountAsync(factory, "import-issues", Password);
+        using var client = await CreateAuthenticatedClientAsync(factory, "import-issues", Password);
+        var source = Path.Combine(factory.StorageRoot, "invalid-upload.xlsm");
+        Directory.CreateDirectory(factory.StorageRoot);
+        File.Copy(FixturePath, source);
+        SetInlineText(source, "Jan", "D6", "Pendapatan Uji 01");
+        SetInlineText(source, "Jan", "C8", "Metode Hilang");
+
+        using var response = await ImportAsync(client, source, 2026, false, true);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("workbook_import_invalid", problem.RootElement.GetProperty("code").GetString());
+        var issues = problem.RootElement.GetProperty("issues").EnumerateArray()
+            .Select(issue => $"{issue.GetProperty("sheet").GetString()}!{issue.GetProperty("cell").GetString()}")
+            .ToArray();
+        Assert.Equal(["Jan!D6", "Jan!C8"], issues);
+        var detail = problem.RootElement.GetProperty("detail").GetString()!;
+        Assert.Contains("Jan baris 6 (kolom D)", detail, StringComparison.Ordinal);
+        Assert.Contains("Jan baris 8 (kolom C)", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Unwritable_staging_is_reported_as_a_server_storage_problem_and_fails_readiness()
+    {
+        using var factory = new LajurApiFactory();
+        await CreateAccountAsync(factory, "staging-broken", Password);
+        using var client = await CreateAuthenticatedClientAsync(factory, "staging-broken", Password);
+        await File.WriteAllTextAsync(Path.Combine(factory.StorageRoot, "staging"), "not a directory");
+
+        using var response = await ImportAsync(client, FixturePath, 2026, false, true);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("server_storage_unavailable", problem.RootElement.GetProperty("code").GetString());
+        using var ready = await client.GetAsync("/health/ready");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
+    }
+
+    private static void SetInlineText(string path, string sheetName, string reference, string value)
+    {
+        using var document = SpreadsheetDocument.Open(path, true);
+        var workbookPart = document.WorkbookPart!;
+        var sheet = workbookPart.Workbook!.Sheets!.Elements<Sheet>().Single(candidate => candidate.Name == sheetName);
+        var worksheet = ((WorksheetPart)workbookPart.GetPartById(sheet.Id!)).Worksheet!;
+        var cell = worksheet.Descendants<Cell>().Single(candidate => candidate.CellReference == reference);
+        cell.CellFormula = null;
+        cell.CellValue = null;
+        cell.DataType = CellValues.InlineString;
+        cell.InlineString = new InlineString(new Text(value));
+        worksheet.Save();
     }
 
     private static async Task<HttpResponseMessage> ImportAsync(

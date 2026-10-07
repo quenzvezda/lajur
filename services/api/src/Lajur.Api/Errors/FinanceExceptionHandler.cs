@@ -19,32 +19,49 @@ public sealed class FinanceExceptionHandler(
             return false;
         }
 
-        logger.LogWarning(
+        logger.Log(
+            error.Code == StorageUnavailableCode ? LogLevel.Error : LogLevel.Warning,
             exception,
             "Finance request failed with code {ErrorCode} and status {StatusCode}",
             error.Code,
             error.Status);
         httpContext.Response.StatusCode = error.Status;
+        var problem = new ProblemDetails
+        {
+            Status = error.Status,
+            Title = error.Title,
+            Detail = error.Detail,
+            Extensions =
+            {
+                ["code"] = error.Code,
+                ["traceId"] = httpContext.TraceIdentifier
+            }
+        };
+        if (exception is WorkbookImportValidationException { Issues.Count: > 0 } invalid)
+        {
+            problem.Extensions["issues"] = invalid.Issues
+                .Select(issue => new { issue.Sheet, issue.Row, issue.Column, issue.Cell, issue.Message })
+                .ToArray();
+        }
+
         return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
         {
             HttpContext = httpContext,
-            ProblemDetails = new ProblemDetails
-            {
-                Status = error.Status,
-                Title = error.Title,
-                Detail = error.Detail,
-                Extensions =
-                {
-                    ["code"] = error.Code,
-                    ["traceId"] = httpContext.TraceIdentifier
-                }
-            },
+            ProblemDetails = problem,
             Exception = exception
         });
     }
 
+    public const string StorageUnavailableCode = "server_storage_unavailable";
+
     private static FinanceError? Map(Exception exception) => exception switch
     {
+        _ when StorageFault.IsServerStorageFault(exception) => new(
+            StatusCodes.Status503ServiceUnavailable,
+            "Server storage unavailable",
+            StorageUnavailableCode,
+            "Penyimpanan server tidak dapat ditulis. Ini masalah konfigurasi server, bukan workbook Anda; " +
+            "mencoba ulang tidak akan membantu. Hubungi admin server."),
         WorkbookTransactionIdConflictException => new(
             StatusCodes.Status409Conflict,
             "Transaction ID conflict",
@@ -109,7 +126,7 @@ public sealed class FinanceExceptionHandler(
             StatusCodes.Status503ServiceUnavailable,
             "Workbook temporarily unavailable",
             "workbook_unavailable",
-            "The workbook could not be accessed safely. Retry later."),
+            "Workbook sedang dipakai proses lain di server. Coba lagi sebentar lagi."),
         _ => null
     };
 

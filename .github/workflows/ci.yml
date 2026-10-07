@@ -73,3 +73,6 @@ jobs:
 
       - name: Build API image
         run: docker build --file services/api/Dockerfile --tag lajur-api:ci .
+
+      - name: Container smoke test
+        run: bash services/api/tests/container-smoke.sh lajur-api:ci tests/workbook-fixtures/LajurWorkbookFixture.xlsm

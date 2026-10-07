@@ -76,18 +76,38 @@ public sealed class WorkbookManagementService(
         }
 
         var stagingDirectory = Path.Combine(storageRoot, "staging", userId.ToString("N"));
-        Directory.CreateDirectory(stagingDirectory);
+        try
+        {
+            Directory.CreateDirectory(stagingDirectory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new ServerStorageUnavailableException("staging", exception);
+        }
+
         var stagedPath = Path.Combine(stagingDirectory, $"{Guid.NewGuid():N}.xlsm");
         try
         {
             await CopyWithLimitAsync(content, stagedPath, cancellationToken);
             WorkbookPackageSecurity.Validate(stagedPath);
-            var detectedYear = new OpenXmlWorkbookReader().DetectWorkbookYear(stagedPath);
+            int detectedYear;
+            try
+            {
+                OpenXmlWorkbookStore.ThrowIfImportRowsInvalid(stagedPath, confirmedYear);
+                detectedYear = new OpenXmlWorkbookReader().DetectWorkbookYear(stagedPath);
+            }
+            catch (InvalidDataException exception)
+            {
+                throw new WorkbookImportValidationException(
+                    $"Struktur workbook tidak sesuai kontrak Lajur: {exception.Message}",
+                    exception);
+            }
+
             var year = confirmedYear ?? detectedYear;
             if (year != detectedYear)
             {
                 throw new WorkbookImportValidationException(
-                    $"Workbook year {detectedYear} does not match confirmed year {year}.");
+                    $"Workbook berisi tahun {detectedYear}, bukan tahun {year} yang dikonfirmasi.");
             }
 
             var stored = await store.ImportWorkbookAsync(

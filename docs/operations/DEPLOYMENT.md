@@ -46,7 +46,9 @@ Mount host directories:
 /srv/lajur/staging
 ```
 
-Container replacement must not remove data/session keys.
+Container replacement must not remove data/session keys. Every mounted directory except
+`templates` must be writable by the container user (`APP_UID`, 1654 in the .NET images);
+`/health/ready` fails when one is not.
 
 ## 4. GitHub Actions
 

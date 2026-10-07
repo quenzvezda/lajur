@@ -201,6 +201,43 @@ public sealed class OpenXmlWorkbookLifecycleTests
         Assert.False(File.Exists(workspace.WorkbookPath(key)));
     }
 
+    [Fact]
+    public async Task Import_ReportsEveryInvalidRowWithLocationInsteadOfOnlyTheFirst()
+    {
+        using var workspace = new LifecycleWorkspace();
+        var source = Path.Combine(workspace.RootPath, "many-invalid-rows.xlsm");
+        File.Copy(FixturePath, source);
+        WriteText(source, "Jan", "C6", "Metode Hilang");
+        WriteText(source, "Jan", "D7", "Kategori Uji 03");
+        WriteText(source, "Jan", "E8", "abc");
+        WriteText(source, "Jan", "B8", "Pengeluaran ");
+        var sourceBefore = SHA256.HashData(File.ReadAllBytes(source));
+        var key = new WorkbookKey(Guid.NewGuid(), 2026);
+        var store = new OpenXmlWorkbookStore(workspace.RootPath);
+
+        var exception = await Assert.ThrowsAsync<WorkbookImportValidationException>(() => store.ImportWorkbookAsync(
+            key, source, false, new WorkbookAuditContext(WorkbookChangeSource.ExcelImport, null, "many-invalid")));
+
+        Assert.Collection(
+            exception.Issues.OrderBy(issue => issue.Row).ThenBy(issue => issue.Column),
+            issue => Assert.Equal(("Jan", 6u, "C"), (issue.Sheet, issue.Row, issue.Column)),
+            issue =>
+            {
+                Assert.Equal(("Jan", 7u, "D"), (issue.Sheet, issue.Row, issue.Column));
+                Assert.Contains("terdaftar sebagai Pengeluaran di Master, tetapi baris ini bertipe Pemasukan", issue.Message, StringComparison.Ordinal);
+            },
+            issue =>
+            {
+                Assert.Equal(("Jan", 8u, "B"), (issue.Sheet, issue.Row, issue.Column));
+                Assert.Contains("spasi berlebih", issue.Message, StringComparison.Ordinal);
+            },
+            issue => Assert.Equal(("Jan", 8u, "E"), (issue.Sheet, issue.Row, issue.Column)));
+        Assert.Contains("3 baris perlu diperbaiki", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Jan baris 7 (kolom D)", exception.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(workspace.WorkbookPath(key)));
+        Assert.Equal(sourceBefore, SHA256.HashData(File.ReadAllBytes(source)));
+    }
+
     private static byte[] ReadZipEntryHash(string workbookPath, string entryName)
     {
         using var stream = File.OpenRead(workbookPath);
