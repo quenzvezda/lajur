@@ -7,6 +7,7 @@
 - [Product specification](product/PRODUCT_SPEC.md)
 - [UX flows](product/UX_FLOWS.md)
 - [Onboarding](product/ONBOARDING.md)
+- [Logo and application icons](product/branding/README.md)
 
 ## Architecture
 

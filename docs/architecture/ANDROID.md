@@ -233,6 +233,11 @@ Minimal but not visually dead:
 
 The visual system can be iterated after a functional prototype.
 
+The Lajur identity uses a teal tile with a white L and mint ledger strokes. The
+same source produces adaptive/monochrome launcher layers, raster density icons,
+and the logo shown on Login and Unlock. See `../product/branding/README.md` for
+editable sources, exports, palette, and visual smoke checks.
+
 The transaction editor uses integer-IDR input with visual thousands grouping,
 a calendar date picker, field-width anchored menus for type/payment, and a
 searchable category bottom sheet constrained to the selected type's Master

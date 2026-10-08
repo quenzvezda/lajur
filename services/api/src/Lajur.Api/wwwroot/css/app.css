@@ -163,11 +163,9 @@ p { margin: 0; }
 .brand { display: inline-flex; align-items: center; gap: .55rem; font-weight: 700; font-size: 1.05rem; color: var(--text); text-decoration: none; }
 .brand--large { font-size: 1.4rem; }
 .brand-mark {
-  width: 22px; height: 22px; border-radius: 6px; flex: none;
-  background:
-    linear-gradient(90deg, transparent 30%, rgba(255,255,255,.85) 30% 38%, transparent 38% 62%, rgba(255,255,255,.85) 62% 70%, transparent 70%),
-    var(--accent);
+  display: block; width: 28px; height: 28px; border-radius: 7px; flex: none;
 }
+.brand--large .brand-mark { width: 32px; height: 32px; border-radius: 8px; }
 .topbar {
   position: sticky; top: 0; z-index: 20;
   display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem;

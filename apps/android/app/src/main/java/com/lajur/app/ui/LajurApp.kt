@@ -263,6 +263,8 @@ private fun UnlockScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        LajurBrand()
+        Spacer(Modifier.height(24.dp))
         Text("Lajur terkunci", style = MaterialTheme.typography.headlineMedium)
         Text("Buka dengan biometrik atau kunci layar perangkat.")
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -286,7 +288,8 @@ private fun LoginScreen(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Lajur", style = MaterialTheme.typography.displaySmall)
+        LajurBrand()
+        Spacer(Modifier.height(12.dp))
         Text("Catat cepat, Excel tetap milikmu.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(24.dp))
         OutlinedTextField(server, { server = it }, label = { Text("Alamat server") }, modifier = Modifier.fillMaxWidth())

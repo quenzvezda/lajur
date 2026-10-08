@@ -80,12 +80,35 @@ cd apps/android
 .\gradlew.bat compileDebugAndroidTestKotlin lintDebug
 ```
 
-The emulator reaches the host API through
-`http://10.0.2.2:8080/api/v1/`, which is the debug default. A physical device
-must use the development computer's reachable LAN address (and the API must be
-bound/firewalled accordingly). The login screen can override the address, or a
-different build default can be supplied with
+The debug default is `http://127.0.0.1:8080/api/v1/`. Use ADB reverse to forward
+the Android device's port 8080 to the host's port 8080; this also works with a
+paired wireless-debugging device and keeps the Docker API bound to host loopback.
+For an emulator without ADB reverse, override the login address with
+`http://10.0.2.2:8080/api/v1/`. A different build default can be supplied with
 `-PLAJUR_API_BASE_URL=https://host/api/v1/`.
+
+### Wireless debugging and localhost
+
+Enable Wireless debugging on Android and pair it with the host if it is not
+already paired. Pairing and connection use separate ports shown by Android;
+enter the pairing code in the local terminal, not in repository files.
+
+```powershell
+adb mdns services
+adb devices -l
+# If the paired device is not connected, use its current connection endpoint:
+adb connect '<device-ip>:<connection-port>'
+# Select the serial reported by adb devices; quote it if it contains spaces.
+adb -s '<device-serial>' reverse tcp:8080 tcp:8080
+adb -s '<device-serial>' reverse --list
+adb -s '<device-serial>' install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Run installation from the repository root after building the APK. In Lajur, use
+`http://127.0.0.1:8080/api/v1/` as the server address. `install -r` updates the app
+while retaining its data. Repeat the reverse command after an ADB disconnect or
+device restart; wireless connection ports can also change. Do not publish the
+Docker API on the LAN just to use a connected development device.
 
 Create an emulator system image in Android Studio Device Manager, or connect a
 USB-debuggable device, before running:

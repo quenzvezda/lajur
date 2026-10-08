@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>@(ViewData["Title"] is string title ? $"{title} · Lajur" : "Lajur")</title>
-    <link rel="icon" href="data:,">
+    <link rel="icon" type="image/svg+xml" href="~/brand/lajur-icon.svg" asp-append-version="true">
+    <link rel="icon" type="image/png" sizes="32x32" href="~/brand/favicon-32.png" asp-append-version="true">
+    <link rel="icon" type="image/png" sizes="16x16" href="~/brand/favicon-16.png" asp-append-version="true">
+    <link rel="shortcut icon" href="~/favicon.ico" asp-append-version="true">
+    <link rel="apple-touch-icon" sizes="180x180" href="~/brand/apple-touch-icon.png" asp-append-version="true">
     <link rel="stylesheet" href="~/css/app.css" asp-append-version="true">
 </head>
 <body class="@ViewData["BodyClass"]">
