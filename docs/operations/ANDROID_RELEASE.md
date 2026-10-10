@@ -29,8 +29,37 @@ APK verification checks the expected signing certificate before uploading:
   public certificate fingerprint.
 
 Download the `lajur-release-<run_number>` artifact from the completed Actions
-run. Retention is 30 days. Actions artifacts currently require a GitHub login;
-this stage does not publish GitHub Releases or implement the in-app updater.
+run. Retention is 30 days; Actions artifacts require a GitHub login.
+
+## Public GitHub Releases
+
+After signing succeeds, a separate publication job downloads only this run's
+artifact. It verifies its exact file list, source commit, version, application
+ID, public certificate fingerprint and APK checksum. It creates a draft release,
+uploads every asset, then publishes `v1.0.<run_number>` and marks it latest.
+The publication job alone has `contents: write`; it does not receive signing
+credentials. Pull requests and other branches cannot run it.
+
+Every successful main build is an automatically published release, including
+manual CI runs on main. This is the current continuous distribution policy;
+there is no separate manual promotion gate. Never overwrite a published APK
+with a different build under the same version. Rerunning publication with
+identical asset digests is safe; changed assets require a new workflow run/version.
+Partial uploads remain in a draft and can be retried. Existing version tags for
+another source commit are rejected rather than moved.
+
+Download without login from [the latest release](https://github.com/quenzvezda/lajur/releases/latest).
+Alongside APK/checksums/build metadata, each release has `update.json`:
+
+- schema version 1, versionCode/versionName and application ID;
+- immutable version-specific HTTPS APK URL, byte size and SHA-256;
+- expected certificate SHA-256, minimum API level, source commit and release URL.
+
+The stable discovery URL is
+`https://github.com/quenzvezda/lajur/releases/latest/download/update.json`.
+This is preparation for the Android updater; no in-app update behavior is
+implemented at this stage. Update checks must compare integer versionCode and
+verify the downloaded APK's package, checksum and certificate before installation.
 
 ## Signing secrets
 

@@ -4,6 +4,11 @@
 
 **Tagline:** Catat cepat, Excel tetap milikmu.
 
+[Download the latest signed Android APK](https://github.com/quenzvezda/lajur/releases/latest)
+from GitHub Releases (Android 8.0+). A self-hosted HTTPS backend is required;
+the initial VPS deployment is still pending. Build/signing details are in
+[Android release operations](docs/operations/ANDROID_RELEASE.md).
+
 This repository specification is the handoff package for an agentic coding workflow. It intentionally separates durable product/architecture decisions from implementation plans so coding agents can load only the context they need.
 
 ## Product intent

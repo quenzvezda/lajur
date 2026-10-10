@@ -30,6 +30,9 @@ jobs:
       - name: Restore
         run: dotnet restore services/api/Lajur.slnx
 
+      - name: Test release publication guards
+        run: python3 .github/scripts/test_publish_android_release.py
+
       - name: Build
         run: dotnet build services/api/Lajur.slnx --configuration Release --no-restore
 
@@ -171,3 +174,31 @@ jobs:
           path: apps/android/release-output/
           if-no-files-found: error
           retention-days: 30
+
+  publish-android:
+    name: Publish Android release
+    needs: android-release
+    if: github.repository == 'quenzvezda/lajur' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    environment: android-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Check out publication script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download this run's verified APK
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: lajur-release-${{ github.run_number }}
+          path: release-artifact
+
+      - name: Verify artifact and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LAJUR_EXPECTED_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+        run: python3 .github/scripts/publish-android-release.py

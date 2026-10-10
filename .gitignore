@@ -89,4 +89,5 @@ apps/android/app/src/main/assets/models/
 *.temp
 *.bak
 *.swp
+__pycache__/
 *~
