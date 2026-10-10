@@ -107,8 +107,9 @@ Gradle lint/test/build debug/release candidate
 
 The current CI builds a verified signed APK after checks pass on `main`.
 Successful main builds are automatically published to public GitHub Releases.
-See [Android release operations](ANDROID_RELEASE.md). The updater, registry and
-VPS deployment remain separate upcoming stages.
+The Android app checks these releases and supports verified download/install
+from Login and Settings. See [Android release operations](ANDROID_RELEASE.md).
+Container registry publication and VPS deployment remain upcoming stages.
 
 Do not require emulator UI E2E for ordinary deployment.
 
