@@ -9,6 +9,8 @@ the repository identity so forks cannot publish official Lajur builds.
 
 Actions are pinned to full commit SHAs. The Android SDK setup action makes
 `sdkmanager` available before installing API 37 and build-tools 36.0.0.
+Its bootstrap package list is explicitly `platform-tools`; the action's default
+also requests obsolete `tools`, which the SDK repository no longer provides.
 Release packaging runs lint and requires signing credentials; it cannot
 silently produce an unsigned APK. Domain tests run in the preceding Android
 job (`testDebugUnitTest`); the current AGP configuration has no release unit-test
