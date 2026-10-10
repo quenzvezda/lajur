@@ -272,6 +272,15 @@ promotion and desktop Excel/macro acceptance remain separate owner-reviewed work
 
 ## 16. Direct server-file editing
 
+Browser settings mutations (ADR 0010) are a narrow additional write boundary:
+existing expense-category targets in Master C, recognized monthly source payout
+days in L and literal estimates in M, and the known meal input cells M10/M11.
+The meal formula itself, actual-income formulas, other projection formulas,
+named ranges, macro/control/chart parts and monthly A:F remain unchanged.
+Unsupported/formula-backed bindings are read-only. Nullable inputs remain empty;
+zero remains an explicit numeric value. Each accepted batch appends one settings
+audit, requests recalculation, creates a backup and atomically promotes the book.
+
 Out of scope in v1:
 
 - opening the active server XLSM over SMB/network share while API writes;

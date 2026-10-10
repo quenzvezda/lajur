@@ -353,4 +353,32 @@ retrying; no silent overwrite or automatic conflict resolution is promised.
 
 Monthly UI restricts new drafts to the displayed month; editing can move an
 existing row to another month in the same year with confirmation. Financial
-responses are no-store. Master/budget/projection mutation endpoints are absent.
+responses are no-store. Category/payment Master CRUD remains a separate slice.
+
+## 10. Browser structured workbook settings
+
+Base `/web/books/{year}/settings` uses the same browser cookie, antiforgery and
+no-store policies (ADR 0010). All IDR inputs/responses are decimal strings or
+null, distinct from zero. Cell addresses and formulas are never client inputs.
+
+- `GET /budget`: `{ version, categories: [{ category, amountIdr, editable, reason }] }`.
+- `PUT /budget`: `{ operationId, expectedVersion, changes: [{ category, amountIdr }] }`.
+  A batch commits atomically. Only supported expense-category targets are writable;
+  one monthly target is shared by Jan–Dec in that annual book.
+- `GET /projection/{month}`: `{ month, version, sources: [{ id, label, payoutDay,
+  estimateIdr, isMealAllowance, workDays, dailyRateIdr, editable, reason }] }`.
+- `PUT /projection/{month}`: `{ operationId, expectedVersion, changes: [{ id,
+  payoutDay, estimateIdr, workDays, dailyRateIdr }] }`. Meal entries require
+  estimateIdr=null; other entries require workDays/dailyRateIdr=null. Payout day
+  is nullable 1–31, workdays nullable 0–31, money nullable nonnegative Int64;
+  computed estimates and totals must also fit. Successful PUT returns fresh settings.
+- `GET /operations/{operationId}`: receipt `{ operationId, scope }`, or 404. Scope
+  is `BUDGET` or `PROJECTION_<month>`. An accepted receipt survives later edits.
+
+Unsupported/formula inputs are read-only. Unknown IDs, duplicate targets, invalid
+values and aggregate overflow reject the whole batch. Settings versions are
+independent of transaction revisions. Stale versions or UUID reuse with different
+payloads return 409 `settings_revision_conflict`; exact command retry returns
+current settings without another audit/write effect. Browser uncertainty is
+inspected by receipt before retrying the original command. Owner/year lock,
+pre-settings backup, validated temporary workbook and atomic promotion apply.

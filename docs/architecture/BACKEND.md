@@ -55,13 +55,18 @@ Canonical host layout:
 
 Never derive `<immutable-user-id>` from a username or upload filename.
 
-## 3a. Read-only web viewer
+## 3a. Browser workbook UI
 
 `Lajur.Api` also serves Razor Pages (`Pages/`) and static assets (`wwwroot/`) for the browser
 viewer (ADR 0008). `IFinanceReportService` reads one consistent year snapshot through
 `OpenXmlWorkbookStore.ReadYearAsync` (Master + twelve A:F tables + B1/D1 balance inputs, under the
 per-workbook lock) and `FinanceReportCalculator` recomputes the Rekap/monthly aggregates. The
-viewer never writes to the workbook and never reads cached formula/pivot values.
+report GETs never write to the workbook and never read cached formula/pivot values.
+Browser transaction commands share the finance writer with Android (ADR 0009).
+Structured budget/projection commands use `IWorkbookSettingsService`, mapped
+literal inputs, independent scope versions and audit operation receipts (ADR
+0010). Both use the owner/year lock and atomic XLSM promotion. Settings commands
+create pre-settings backups; exact replay does not rewrite the active book.
 
 ## 4. Per-workbook serialization
 
@@ -197,4 +202,5 @@ deployment may legitimately run without one until the operator installs it.
 Web-viewer report notes: `ReportClock` supplies the owner's local date for TODAY()-based panels
 (`Lajur:Reports:TimeZone`, default `Asia/Jakarta`, fixed UTC+7 fallback when tzdata is absent).
 `OpenXmlWorkbookStore` caches one parsed year per workbook keyed by file write time and length,
-checked under the per-workbook lock; any write produces a new stamp, so a stale year is never served.
+checked under the per-workbook lock; promotion explicitly invalidates the parsed
+year cache rather than relying solely on file stamp resolution.

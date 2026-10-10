@@ -34,6 +34,33 @@
 }
 
 /* Transaction drafts: one complete row per save, with a vertical layout on smaller screens. */
+.settings-dialog { width: min(840px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.settings-dialog::backdrop { background: rgba(0, 0, 0, .5); }
+.settings-heading { padding: 18px 20px; display: flex; align-items: start; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); }
+.settings-heading h2 { font-size: 1.1rem; margin-bottom: 6px; }
+.settings-content { padding: 20px; max-height: calc(100dvh - 240px); overflow-y: auto; }
+.settings-footer { padding: 14px 20px; border-top: 1px solid var(--border); justify-content: flex-end; }
+.settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.settings-budget-list { display: grid; }
+.settings-budget-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 240px); align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.settings-field { display: grid; gap: 6px; min-width: 0; }
+.settings-field label { font-size: .82rem; color: var(--muted); }
+.settings-field input { min-height: 38px; }
+.settings-source { padding: 16px 0; border-bottom: 1px solid var(--border); display: grid; gap: 12px; }
+.settings-source:first-child { padding-top: 0; }
+.settings-source h3 { font-size: .95rem; }
+.settings-source-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.settings-message { overflow-wrap: anywhere; }
+.settings-dialog td, .settings-dialog th { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .settings-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .settings-heading, .settings-content { padding: 16px; }
+  .settings-content { max-height: calc(100dvh - 250px); }
+  .settings-footer { padding: 12px 16px; }
+  .settings-dialog .button, .settings-dialog .input { min-height: 44px; }
+  .settings-dialog .input { font-size: 16px; }
+  .settings-budget-row, .settings-source-fields { grid-template-columns: minmax(0, 1fr); }
+}
 .transaction-editor { display: grid; gap: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .editor-heading, .editor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .editor-heading { justify-content: space-between; }

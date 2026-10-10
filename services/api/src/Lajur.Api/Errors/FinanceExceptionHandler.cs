@@ -72,6 +72,11 @@ public sealed class FinanceExceptionHandler(
             "Transaction revision conflict",
             "transaction_revision_conflict",
             "The transaction has changed since the supplied revision."),
+        WorkbookSettingsConflictException => new(
+            StatusCodes.Status409Conflict,
+            "Workbook settings conflict",
+            "settings_revision_conflict",
+            exception.Message),
         WorkbookAlreadyExistsException => new(
             StatusCodes.Status409Conflict,
             "Workbook already exists",

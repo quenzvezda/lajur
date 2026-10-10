@@ -1,5 +1,6 @@
 import { createTransactionEditor } from './transactions.js';
 import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
+import { createWorkbookSettingsEditor } from './settings.js';
 
 // Lajur workbook UI. Reports remain server-computed; browser commands use stable transaction IDs.
 // Renders the server-computed YearReport (embedded as JSON). Headline totals always come from the
@@ -156,6 +157,7 @@ import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
     updateTimestamp();
   }
   const transactions = createTransactionEditor({ h, getReport: () => report, refreshReport, render, notify });
+  const settings = createWorkbookSettingsEditor({ h, getReport: () => report, refreshReport, render, notify, monthNames: MONTH_LONG });
   window.addEventListener('lajur-theme-change', render);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if (!document.documentElement.dataset.theme) render();
@@ -361,7 +363,8 @@ import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
       projection.complete ? null : h('p', { class: 'alert alert--warn', text: 'Ada baris yang rumusnya tidak dikenali ("belum dipetakan"), jadi total yang bergantung padanya tidak dihitung.' }),
       h('h3', { class: 'subhead', text: 'Ringkasan proyeksi' }),
       summary,
-      h('p', { class: 'muted small', text: `Estimasi & tanggal cair dibaca dari sel input di sheet. "Hari ini" = ${todayLabel()}.` })));
+      h('p', { class: 'muted small', text: `Estimasi & tanggal cair dibaca dari sel input di sheet. "Hari ini" = ${todayLabel()}.` })),
+      { aside: settings.button('projection', month.month) });
   }
 
   function fact(label, value, hint) {
@@ -441,7 +444,7 @@ import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
     const state = tableState(tableKey);
     const activeCategory = state.filters.category && state.filters.category.size === 1 ? [...state.filters.category][0] : null;
     if (month.expenseByCategory.length === 0) {
-      return panel('Pengeluaran per kategori', h('p', { class: 'muted', text: 'Belum ada pengeluaran.' }));
+        return panel('Pengeluaran per kategori', h('p', { class: 'muted', text: 'Belum ada pengeluaran.' }), { aside: settings.button('budget', month.month) });
     }
     const body = h('table', { class: 'pivot' },
       h('thead', null, h('tr', null,
@@ -465,7 +468,7 @@ import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
       h('tfoot', null, h('tr', null,
         h('th', { text: 'Total pengeluaran' }), h('th', { class: 'num', text: fmt(total) }), h('th', { class: 'num', text: '100%' }), h('th'))));
     return panel('Pengeluaran per kategori', body, {
-      aside: h('span', { class: 'muted small', text: 'Klik baris → filter tabel' })
+      aside: settings.button('budget', month.month)
     });
   }
 
@@ -1162,13 +1165,13 @@ import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
     const categoryTable = (items) => h('div', { class: 'table-scroll' }, h('table', { class: 'grid grid--report' },
       h('thead', null, h('tr', null, h('th', { scope: 'col', text: 'Kategori' }), h('th', { scope: 'col', text: 'Jenis' }), h('th', { scope: 'col', class: 'num', text: 'Budget / bulan' }))),
       h('tbody', null, items.map((c) => h('tr', null,
-        h('td', { text: c.name }), h('td', null, typePill(c.kind)), h('td', { class: 'num', text: c.monthlyBudgetIdr ? fmt(c.monthlyBudgetIdr) : '—' }))))));
+        h('td', { text: c.name }), h('td', null, typePill(c.kind)), h('td', { class: 'num', text: c.monthlyBudgetIdr !== null ? fmt(c.monthlyBudgetIdr) : '—' }))))));
     return h('div', { class: 'view' },
       h('div', { class: 'view-head' }, h('div', null,
         h('h1', { text: 'Master' }),
-        h('p', { class: 'muted', text: 'Daftar milik workbook: sumber dropdown kategori, tipe dan metode pembayaran. Ubah lewat Excel.' }))),
+        h('p', { class: 'muted', text: 'Kategori, tipe dan metode pembayaran milik workbook. Target budget dapat diedit di sini.' }))),
       h('div', { class: 'two-col' },
-        panel(`Kategori pengeluaran (${expense.length})`, categoryTable(expense)),
+        panel(`Kategori pengeluaran (${expense.length})`, categoryTable(expense), { aside: settings.button('budget') }),
         h('div', { class: 'side-stack' },
           panel(`Kategori lain (${other.length})`, other.length ? categoryTable(other) : h('p', { class: 'muted', text: 'Tidak ada.' })),
           panel('Tipe transaksi', h('div', { class: 'chips' }, report.transactionTypes.map(typePill))),

@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace Lajur.Infrastructure.Workbooks;
 
-public sealed class OpenXmlWorkbookStore
+public sealed partial class OpenXmlWorkbookStore
 {
     private static readonly ConcurrentDictionary<WorkbookKey, SemaphoreSlim> Locks = new();
     private readonly ConcurrentDictionary<WorkbookKey, (DateTime WrittenAtUtc, long Length, WorkbookYearData Data)> yearCache = new();
@@ -405,7 +405,8 @@ public sealed class OpenXmlWorkbookStore
     private async Task<TResult> MutateAsync<TResult>(
         WorkbookKey key,
         Func<OpenXmlWorkbookEditor, DateTimeOffset, TResult> mutation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool backupSettings = false)
     {
         var gate = Locks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken);
@@ -430,7 +431,15 @@ public sealed class OpenXmlWorkbookStore
                 var editor = new OpenXmlWorkbookEditor(tempPath, master);
                 var result = mutation(editor, timeProvider.GetUtcNow());
 
+                if (backupSettings && editor.SettingsReplayed) return result;
+
                 ValidateWorkbook(tempPath, key.Year);
+                if (backupSettings)
+                {
+                    var backupDirectory = Path.GetFullPath(backupDirectoryResolver(key));
+                    Directory.CreateDirectory(backupDirectory);
+                    File.Copy(activePath, Path.Combine(backupDirectory, $"{timeProvider.GetUtcNow():yyyyMMddTHHmmssfffZ}-pre-settings-{Guid.NewGuid():N}.xlsm"));
+                }
                 File.Move(tempPath, activePath, overwrite: true);
                 yearCache.TryRemove(key, out _);
                 return result;

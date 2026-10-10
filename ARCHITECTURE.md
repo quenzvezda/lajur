@@ -80,6 +80,7 @@ Owns:
 - atomic workbook replacement;
 - browser workbook UI and a separate cookie session with antiforgery-protected
   monthly transaction commands (ADR 0009);
+- structured budget and monthly projection input commands (ADR 0010);
 - import/export;
 - backup lifecycle.
 

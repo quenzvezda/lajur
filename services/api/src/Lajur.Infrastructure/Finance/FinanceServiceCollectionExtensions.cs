@@ -30,6 +30,7 @@ public static class FinanceServiceCollectionExtensions
                     key.Year.ToString()));
         });
         services.AddScoped<IFinanceService, WorkbookFinanceService>();
+        services.AddScoped<IWorkbookSettingsService, WorkbookSettingsService>();
         services.AddScoped<IWorkbookService, WorkbookManagementService>();
         services.AddScoped<IFinanceReportService, WorkbookFinanceReportService>();
         return services;

@@ -50,6 +50,15 @@ assert debt/unpaid state. The expense remains included in its transaction month.
 **Master data**  
 Categories, transaction types, payment methods, budgets, and related domain values read from workbook `Master`.
 
+**Monthly budget target**  
+A planned monthly expense amount for one category, shared by all months of an
+annual book. An unset target differs from a target of zero.
+
+**Income projection assumption**  
+An expected income amount and payout day for one month. Meal allowance is
+estimated from manually entered working days and a daily rate. These assumptions
+do not constitute received money or create an actual income transaction.
+
 **Outbox**  
 Durable Android queue of pending create/update/delete commands.
 

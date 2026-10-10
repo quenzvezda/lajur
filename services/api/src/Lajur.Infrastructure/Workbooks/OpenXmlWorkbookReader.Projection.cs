@@ -76,6 +76,8 @@ public sealed partial class OpenXmlWorkbookReader
             label = string.IsNullOrWhiteSpace(label) ? $"Sumber baris {rowNumber}" : label;
 
             var (estimate, estimateRecognized) = ReadEstimate(workbookPart, sheetData, FindCell(row, 13));
+            // Formula-derived cached labels can mention an old month; use stable presentation text.
+            if (FindCell(row, 11)?.CellFormula is not null && FindCell(row, 13)?.CellFormula?.Text == "$M$10*$M$11") label = "Uang makan";
             var category = MatchIncomeCategory(FindCell(row, 14)?.CellFormula?.Text, monthDefinition.TableName);
             var threshold = MatchPaidThreshold(FindCell(row, 15)?.CellFormula?.Text, rowNumber);
             sources.Add(new WorkbookIncomeSourceInput(
