@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           global-json-file: global.json
 
@@ -43,19 +43,22 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
           distribution: temurin
           java-version: "25"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@07d1f8453baaff67fb503883367f8b13e6158a54 # v6
 
       - name: Lint, test, and assemble
         working-directory: apps/android
@@ -69,10 +72,98 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Build API image
         run: docker build --file services/api/Dockerfile --tag lajur-api:ci .
 
       - name: Container smoke test
         run: bash services/api/tests/container-smoke.sh lajur-api:ci tests/workbook-fixtures/LajurWorkbookFixture.xlsm
+
+  android-release:
+    name: Signed Android APK
+    needs: [backend, android, container]
+    if: github.repository == 'quenzvezda/lajur' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    environment: android-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out trusted main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@07d1f8453baaff67fb503883367f8b13e6158a54 # v6
+        with:
+          cache-read-only: true
+
+      - name: Build and verify signed APK
+        working-directory: apps/android
+        env:
+          LAJUR_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          LAJUR_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          LAJUR_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          LAJUR_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          LAJUR_RELEASE_API_BASE_URL: ${{ vars.ANDROID_API_BASE_URL }}
+          LAJUR_EXPECTED_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          : "${LAJUR_KEYSTORE_BASE64:?Missing signing keystore}"
+          : "${LAJUR_SIGNING_STORE_PASSWORD:?Missing signing password}"
+          : "${LAJUR_SIGNING_KEY_ALIAS:?Missing signing alias}"
+          : "${LAJUR_SIGNING_KEY_PASSWORD:?Missing signing key password}"
+          : "${LAJUR_EXPECTED_CERT_SHA256:?Missing expected signing certificate}"
+          umask 077
+          export LAJUR_SIGNING_STORE_FILE="$RUNNER_TEMP/lajur-release.p12"
+          trap 'rm -f "$LAJUR_SIGNING_STORE_FILE"' EXIT
+          printf '%s' "$LAJUR_KEYSTORE_BASE64" | base64 --decode > "$LAJUR_SIGNING_STORE_FILE"
+          unset LAJUR_KEYSTORE_BASE64
+          export LAJUR_VERSION_CODE="$((100000 + GITHUB_RUN_NUMBER))"
+          export LAJUR_VERSION_NAME="1.0.${GITHUB_RUN_NUMBER}"
+          ./gradlew lintRelease assembleRelease --no-daemon --no-configuration-cache
+          apk="app/build/outputs/apk/release/app-release.apk"
+          verifier="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$verifier" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/apk-certificate.txt"
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-certificate.txt")"
+          test "$actual" = "$LAJUR_EXPECTED_CERT_SHA256"
+          mkdir -p release-output
+          filename="lajur-${LAJUR_VERSION_NAME}.apk"
+          cp "$apk" "release-output/$filename"
+          (cd release-output && sha256sum "$filename" > SHA256SUMS)
+          export LAJUR_APK_FILENAME="$filename"
+          python3 - <<'PY'
+          import json, os
+          metadata = {
+              "versionCode": int(os.environ["LAJUR_VERSION_CODE"]),
+              "versionName": os.environ["LAJUR_VERSION_NAME"],
+              "applicationId": "com.lajur.app",
+              "apk": os.environ["LAJUR_APK_FILENAME"],
+              "commit": os.environ["GITHUB_SHA"],
+              "certificateSha256": os.environ["LAJUR_EXPECTED_CERT_SHA256"],
+          }
+          with open("release-output/build-metadata.json", "w") as stream:
+              json.dump(metadata, stream, indent=2)
+          PY
+          printf 'Signed APK: **%s**, versionCode **%s**.\n' "$filename" "$LAJUR_VERSION_CODE" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload verified APK and checksums
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: lajur-release-${{ github.run_number }}
+          path: apps/android/release-output/
+          if-no-files-found: error
+          retention-days: 30

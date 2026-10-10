@@ -5,6 +5,21 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Signing credentials come only from the trusted release job or the operator's environment.
+val releaseStoreFile = providers.environmentVariable("LAJUR_SIGNING_STORE_FILE")
+val releaseStorePassword = providers.environmentVariable("LAJUR_SIGNING_STORE_PASSWORD")
+val releaseKeyAlias = providers.environmentVariable("LAJUR_SIGNING_KEY_ALIAS")
+val releaseKeyPassword = providers.environmentVariable("LAJUR_SIGNING_KEY_PASSWORD")
+val releaseVersionCode = providers.environmentVariable("LAJUR_VERSION_CODE").orElse("1").get().toInt()
+val releaseVersionName = providers.environmentVariable("LAJUR_VERSION_NAME").orElse("1.0").get()
+require(releaseVersionCode in 1..2_100_000_000) { "LAJUR_VERSION_CODE is outside Android's supported range." }
+require(releaseVersionName.matches(Regex("[A-Za-z0-9.+_-]{1,100}"))) { "Invalid LAJUR_VERSION_NAME." }
+val releaseApiUrl = providers.environmentVariable("LAJUR_RELEASE_API_BASE_URL").orElse("").get()
+require(releaseApiUrl.isEmpty() || (releaseApiUrl.startsWith("https://") &&
+    releaseApiUrl.matches(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/api/v1/")))) {
+    "Release API URL must be an HTTPS /api/v1/ endpoint without credentials."
+}
+
 android {
     namespace = "com.lajur.app"
     compileSdk {
@@ -15,8 +30,8 @@ android {
         applicationId = "com.lajur.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
@@ -26,11 +41,26 @@ android {
         )
     }
 
+    signingConfigs {
+        if (releaseStoreFile.isPresent) {
+            create("release") {
+                storeFile = file(releaseStoreFile.get())
+                storePassword = releaseStorePassword.get()
+                keyAlias = releaseKeyAlias.get()
+                keyPassword = releaseKeyPassword.get()
+            }
+        }
+    }
+
     buildTypes {
         debug {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {
+            buildConfigField("String", "LAJUR_API_BASE_URL", "\"$releaseApiUrl\"")
+            if (releaseStoreFile.isPresent) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             optimization {
                 enable = false
@@ -51,6 +81,19 @@ android {
         getByName("androidTest").kotlin.directories.add("src/sharedTest/java")
         getByName("androidTest").assets.directories.add("../../../tests/smart-scan-eval")
     }
+}
+
+val validateReleaseSigning = tasks.register("validateReleaseSigning") {
+    doLast {
+        check(releaseStoreFile.isPresent && releaseStorePassword.isPresent &&
+            releaseKeyAlias.isPresent && releaseKeyPassword.isPresent) {
+            "Signed release requires the four LAJUR_SIGNING_* environment variables."
+        }
+        check(file(releaseStoreFile.get()).isFile) { "Release keystore does not exist." }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(validateReleaseSigning)
 }
 
 ksp {

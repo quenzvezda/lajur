@@ -29,9 +29,10 @@ HTTP/80 may redirect to HTTPS.
 
 Suggested host:
 
-`finance-api.<domain>`
+`lajur.solusi-program.site` (chosen for the first deployment on 2026-10-10)
 
 Actual domain remains deployment configuration.
+DNS/HTTPS and the VPS service are not configured yet.
 
 ## 3. Docker persistence
 
@@ -103,6 +104,10 @@ Android CI can be separate:
 ```text
 Gradle lint/test/build debug/release candidate
 ```
+
+The current CI builds a verified signed APK after checks pass on `main`.
+See [Android release operations](ANDROID_RELEASE.md). Publishing GitHub Releases,
+the updater, registry and VPS deployment remain separate upcoming stages.
 
 Do not require emulator UI E2E for ordinary deployment.
 

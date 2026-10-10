@@ -40,11 +40,13 @@
 ## Operations
 
 - [Deployment](operations/DEPLOYMENT.md)
+- [Signed Android release builds](operations/ANDROID_RELEASE.md)
 - [Backup and recovery](operations/BACKUP_RECOVERY.md)
 
 ## Security
 
 - [Threat model](security/THREAT_MODEL.md)
+- [Public repository audit, 2026-10-10](security/PUBLIC_REPOSITORY_AUDIT_2026_10_10.md)
 
 ## Testing
 

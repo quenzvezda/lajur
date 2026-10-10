@@ -20,6 +20,10 @@ python_bin="python3"
 
 cleanup() {
   for name in "${containers[@]}"; do docker rm -f "$name" >/dev/null 2>&1 || true; done
+  # App-owned nested directories can be mode 700 on Linux. Give the runner
+  # access to this test's unique temporary mount before removing it.
+  docker run --rm --user 0 --entrypoint /bin/sh \
+    --volume "$work:/cleanup" "$image" -c 'chmod -R a+rwX /cleanup' >/dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT

@@ -32,6 +32,10 @@ Override the compiled debug default when needed:
 
 ## Verify
 
+Signed builds from `main` are available as CI artifacts after all checks pass.
+See [Android release operations](../../docs/operations/ANDROID_RELEASE.md) for
+signing, versioning, backup and the debug-to-release transition.
+
 ```powershell
 .\gradlew.bat testDebugUnitTest assembleDebug compileDebugAndroidTestKotlin lintDebug
 ```

@@ -50,8 +50,11 @@ lint-results*.html
 # Android signing material
 *.jks
 *.keystore
+*.p12
+*.pfx
 keystore.properties
 signing.properties
+apps/android/release-output/
 
 # Local environment and secrets
 .env
