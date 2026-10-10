@@ -48,6 +48,7 @@ scan/ocr/
 scan/llm/
 scan/extraction/
 settings/
+update/
 ```
 
 ## 3. State ownership
@@ -69,6 +70,7 @@ Stores normal preferences:
 - sync options;
 - last/default payment preference;
 - smart-scan options.
+- automatic app-update checks, last attempt and cached verified release metadata.
 
 ### Keystore-backed encrypted storage
 
@@ -126,6 +128,24 @@ offline entry. Selected-year canonical cache/Master are invalidated before uploa
 to survive ambiguous responses/process death; failed attempts also need reload.
 No automatic retry of a connection-failed import. See
 `development/WORKBOOK_MENU_SMOKE.md` for acceptance steps and limitations.
+
+## 5b. Application distribution updates
+
+An application-scoped update controller owns one check/download/install-preparation
+job. It uses a separate credential-free OkHttp client to read the official public
+GitHub Release manifest. Release builds check on foreground at most daily;
+manual checks are available before login and in Settings. A persisted opt-out
+disables automatic checks. Finance entry, synchronization and app lock remain
+independent. No forced update or automatic APK download is implemented.
+
+Version selection and package integrity rules live in a pure Kotlin policy.
+Downloads stream to bounded private cache and publish only after exact size and
+SHA-256 checks. PackageManager checks package/version/minimum SDK/signatures;
+both archive and installed certificates must match the pinned release key.
+Cached files are revalidated on restart and before sharing to the Android
+installer through FileProvider. Unknown-source permission and final installation
+require explicit system UI actions. Updates do not migrate or clear finance data.
+See `../operations/ANDROID_RELEASE.md` for URLs and distribution policy.
 
 ## 6. LLM lifecycle
 

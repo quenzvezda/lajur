@@ -35,6 +35,7 @@ class AppContainer(context: Context) {
     }
     val database = LajurDatabase.create(context)
     val appLockSettingsStore = AppLockSettingsStore(context)
+    val appUpdateController = com.lajur.app.update.AppUpdateController(applicationContext, json)
     val temporaryCaptureStore = TemporaryCaptureStore(context)
     val extractionValidator = TransactionExtractionValidator()
     val debugScanDiagnosticsStore = DebugScanDiagnosticsStore(applicationContext, json)

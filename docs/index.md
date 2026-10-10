@@ -30,6 +30,7 @@
 - [Smart Scan and editor UX smoke test](development/SMART_SCAN_UX_SMOKE.md)
 - [Data/Workbook menu smoke test](development/WORKBOOK_MENU_SMOKE.md)
 - [Home and Back navigation smoke test](development/HOME_NAVIGATION_SMOKE.md)
+- [Android app-update smoke test](development/ANDROID_APP_UPDATE_SMOKE.md)
 - [Monthly web transaction CRUD smoke test](development/WEB_TRANSACTION_CRUD_SMOKE.md)
 - [Workbook settings smoke test](development/WEB_WORKBOOK_SETTINGS_SMOKE.md)
 - [Master CRUD smoke test](development/WEB_MASTER_CRUD_SMOKE.md)

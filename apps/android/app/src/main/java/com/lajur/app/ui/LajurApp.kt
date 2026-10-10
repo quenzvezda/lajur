@@ -2,6 +2,9 @@ package com.lajur.app.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,6 +90,7 @@ fun LajurApp(
                 viewModel.clearMessage()
                 viewModel.login(server, username, password)
             },
+            updateContent = { AppUpdateRoute(viewModel) },
         )
         is SessionState.SignedIn -> when (lockStatus) {
             AppLockStatus.RESTORING -> LoadingScreen()
@@ -121,6 +125,7 @@ private fun SignedInApp(
     val month by viewModel.month.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val syncCounts by viewModel.syncCounts.collectAsStateWithLifecycle()
+    val appUpdate by viewModel.appUpdates.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val lockSettings by viewModel.appLockSettings.collectAsStateWithLifecycle()
     val pendingSharedImage by viewModel.pendingSharedImage.collectAsStateWithLifecycle()
@@ -143,6 +148,13 @@ private fun SignedInApp(
         message?.let {
             snackbar.showSnackbar(it)
             viewModel.clearMessage()
+        }
+    }
+    LaunchedEffect(appUpdate.release?.versionCode) {
+        val release = appUpdate.release
+        if (release != null && appUpdate.incompatibility == null && screen != AppScreen.Main(MainTab.SETTINGS)) {
+            if (snackbar.showSnackbar("Pembaruan ${release.versionName} tersedia", actionLabel = "Lihat") ==
+                androidx.compose.material3.SnackbarResult.ActionPerformed) screen = AppScreen.Main(MainTab.SETTINGS)
         }
     }
 
@@ -205,6 +217,7 @@ private fun SignedInApp(
             onData = { screen = AppScreen.Workbooks },
             onSignOut = viewModel::signOut,
             bottomBar = { MainNavigationBar(MainTab.SETTINGS, pendingSharedImage != null) { screen = AppScreen.Main(it) } },
+            updateContent = { AppUpdateRoute(viewModel, showAutoPreference = true) },
         )
         AppScreen.Workbooks -> WorkbookRoute(viewModel, goBack)
         AppScreen.SmartScan -> SmartScanScreen(
@@ -280,12 +293,13 @@ private fun LoginScreen(
     busy: Boolean,
     errorMessage: String?,
     onLogin: (String, String, String) -> Unit,
+    updateContent: @Composable () -> Unit,
 ) {
     var server by rememberSaveable { mutableStateOf(defaultServerUrl) }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         LajurBrand()
@@ -313,6 +327,8 @@ private fun LoginScreen(
         ) {
             if (busy) CircularProgressIndicator(Modifier.height(20.dp)) else Text("Login")
         }
+        Spacer(Modifier.height(24.dp))
+        updateContent()
     }
 }
 
@@ -535,6 +551,7 @@ private fun SettingsScreen(
     onData: () -> Unit,
     onSignOut: () -> Unit,
     bottomBar: @Composable () -> Unit,
+    updateContent: @Composable () -> Unit,
 ) {
     var enableError by remember { mutableStateOf<String?>(null) }
     val timeoutChoices = listOf(
@@ -557,6 +574,7 @@ private fun SettingsScreen(
             Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            item { updateContent() }
             item {
                 Text("Data", style = MaterialTheme.typography.headlineSmall)
                 OutlinedButton(onClick = onData, modifier = Modifier.fillMaxWidth()) { Text("Data / Workbook") }

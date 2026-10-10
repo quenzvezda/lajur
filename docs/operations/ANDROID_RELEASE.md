@@ -57,9 +57,31 @@ Alongside APK/checksums/build metadata, each release has `update.json`:
 
 The stable discovery URL is
 `https://github.com/quenzvezda/lajur/releases/latest/download/update.json`.
-This is preparation for the Android updater; no in-app update behavior is
-implemented at this stage. Update checks must compare integer versionCode and
-verify the downloaded APK's package, checksum and certificate before installation.
+The Android updater reads this manifest without API login or GitHub credentials.
+Login and Settings expose **Cek pembaruan**; release builds also check on startup
+or foregrounding, at most once per 24 hours. Settings can disable automatic
+checks. Failed automatic checks stay quiet; manual checks expose a retry message.
+Checks do not download an APK automatically or block offline transaction entry.
+
+Only a larger integer `versionCode` is offered. The client restricts manifest and
+APK URLs to this official repository's version-specific HTTPS release paths,
+bounds the manifest to 64 KiB and APK to 256 MiB, and rejects malformed metadata.
+Download progress and cancellation are available. Partial downloads are removed;
+there is no resume or background download service. A completed download is kept
+in private cache, with its manifest in DataStore, and revalidated after restart
+and immediately before installation. Android may evict cache, requiring a new
+download. Package ID, version, minimum SDK, exact size, SHA-256 and the pinned
+release signing certificate must match. The installed app must use the same
+certificate; debug builds show an incompatibility explanation instead.
+
+Installation is explicit: **Unduh APK**, then **Izinkan pemasangan** when needed,
+then **Pasang pembaruan**. Returning from the permission page does not silently
+start installation. Android's package installer owns the final confirmation.
+The FileProvider shares only the cached APK via a temporary read grant. No
+backend credentials, workbook bytes or transaction data are sent to GitHub.
+GitHub receives ordinary network metadata such as the requesting IP address.
+Key rotation is intentionally unsupported; it requires a planned client change.
+See [updater acceptance](../development/ANDROID_APP_UPDATE_SMOKE.md).
 
 ## Signing secrets
 
@@ -133,8 +155,9 @@ server/workbook data first. This task does not uninstall, replace, clear data
 or install anything on the owner's Android device.
 
 After the first release installation, subsequent release builds use the same
-key and a higher version code for in-place updates. Installer and offline-data
-retention acceptance will be verified when implementing the updater.
+key and a higher version code for in-place updates. Never uninstall between
+release versions: an ordinary package update retains Room/outbox/preferences.
+Verify this on the target device using the updater acceptance runbook.
 
 References: [Android app signing](https://developer.android.com/studio/publish/app-signing),
 [GitHub Actions secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets).

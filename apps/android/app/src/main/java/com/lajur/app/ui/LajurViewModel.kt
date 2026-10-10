@@ -36,6 +36,13 @@ import java.time.YearMonth
 class LajurViewModel(private val container: AppContainer) : ViewModel() {
     private val appLockStateMachine = AppLockStateMachine()
     val session = container.sessionRepository.state
+    val appUpdates = container.appUpdateController.state
+    fun checkAppUpdates(manual: Boolean = true) = container.appUpdateController.check(manual)
+    fun setAutomaticUpdates(enabled: Boolean) = container.appUpdateController.setAutoCheck(enabled)
+    fun downloadAppUpdate() = container.appUpdateController.download()
+    fun cancelAppUpdateDownload() = container.appUpdateController.cancelDownload()
+    fun installAppUpdate(onReady: (android.content.Intent) -> Unit) = container.appUpdateController.prepareInstallation(onReady)
+    fun appUpdateInstallError() = container.appUpdateController.installationError()
     private val mutableAppLockStatus = MutableStateFlow(AppLockStatus.RESTORING)
     val appLockStatus: StateFlow<AppLockStatus> = mutableAppLockStatus.asStateFlow()
     private val mutableAppLockSettings = MutableStateFlow(AppLockSettings())
@@ -283,6 +290,7 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     fun onAppForegrounded(nowMillis: Long = SystemClock.elapsedRealtime()) {
         appLockStateMachine.onForegrounded(nowMillis)
         publishAppLockStatus()
+        checkAppUpdates(manual = false)
     }
 
     fun onUnlockSucceeded() {

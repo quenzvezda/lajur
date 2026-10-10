@@ -54,6 +54,19 @@ requested; installing a model does not make scans run AI automatically.
 |---|---|
 | Theme | System |
 
+### Application updates
+
+| Setting/action | Default |
+|---|---|
+| Check automatically on foreground | ON, at most every 24 hours, release builds only |
+| Check now | Available in Settings and before login |
+| Download/install update | Explicit actions; Android confirms installation |
+
+Automatic checks use public GitHub Releases independently of the configured
+backend. Disabling checks is persisted in DataStore. A failed automatic check
+does not interrupt entry. Debug builds support manual discovery but cannot
+install an official release over their different signing key.
+
 ### Data
 
 Actions:
