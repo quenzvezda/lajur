@@ -30,6 +30,7 @@
 - [Smart Scan and editor UX smoke test](development/SMART_SCAN_UX_SMOKE.md)
 - [Data/Workbook menu smoke test](development/WORKBOOK_MENU_SMOKE.md)
 - [Home and Back navigation smoke test](development/HOME_NAVIGATION_SMOKE.md)
+- [Monthly web transaction CRUD smoke test](development/WEB_TRANSACTION_CRUD_SMOKE.md)
 - [Local extraction model candidates](reference/LOCAL_MODEL_CANDIDATES.md)
 - [Evidence-first Smart Scan decision](adr/0007-evidence-first-smart-scan.md)
 - [Known issues](development/KNOWN_ISSUES.md)
@@ -54,6 +55,7 @@
 - [Execution plans](exec-plans/README.md)
 - [Active MVP plan](exec-plans/active/0001-mvp.md)
 - [ADR 0008 — read-only web viewer](adr/0008-read-only-web-viewer-and-browser-session.md) (proposed)
+- [ADR 0009 — browser monthly transaction mutations](adr/0009-browser-monthly-transaction-mutations.md)
 
 ## Reference
 

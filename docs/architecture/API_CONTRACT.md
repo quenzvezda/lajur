@@ -8,6 +8,9 @@ Base prefix:
 
 All authenticated endpoints use Bearer access tokens.
 
+This applies to `/api/v1`. Browser routes are separately described in section 9;
+their cookie never authenticates the Android API.
+
 Use `application/problem+json`/ProblemDetails-style errors.
 
 ## 1. Conventions
@@ -322,3 +325,32 @@ Problem body should contain stable machine code, e.g.:
   "traceId": "..."
 }
 ```
+
+## 9. Browser monthly transaction commands
+
+Base `/web/books/{year}` uses the `LajurWeb` cookie policy. Unsafe methods also
+require `X-Lajur-CSRF` with the antiforgery token from the book page. GETs never
+write or reconcile metadata; all reads/writes are isolated to the logged-in user.
+Browser endpoints do not create/revoke Android sessions. See ADR 0009.
+
+- `GET /report`: server-computed annual report; canonical rows include nullable
+  `transactionId`, `revision`, and exact `amountIdrText`. Null identity means the
+  row is readable but requires import reconciliation before edit/delete.
+- `GET /transactions/{id}`: current indexed transaction, or 404. Browser responses
+  use a decimal **string** for `amountIdr`, allowing exact integer recovery.
+- `POST /transactions`: `{ "transactionId": "uuid", "input": { "date": "2026-10-10",
+  "type": "Pengeluaran", "paymentMethod": "", "category": "...",
+  "amountIdr": "15000", "description": "..." } }`.
+- `PUT /transactions/{id}`: `{ "expectedRevision": 1, "input": { ... } }`.
+- `DELETE /transactions/{id}?expectedRevision=1`: revisioned deletion, 204.
+
+Input follows the same Master/type/category/payment constraints as Android;
+amount is a positive whole-IDR decimal string within Int64, date must be in the
+route year. POST retries use the original UUID and canonical content. PUT/DELETE
+use expected revision and return the existing 409/404 domain codes. A lost PUT
+response is reconciled by reading the target and comparing exact content before
+retrying; no silent overwrite or automatic conflict resolution is promised.
+
+Monthly UI restricts new drafts to the displayed month; editing can move an
+existing row to another month in the same year with confirmation. Financial
+responses are no-store. Master/budget/projection mutation endpoints are absent.

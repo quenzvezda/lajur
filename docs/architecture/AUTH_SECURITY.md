@@ -143,7 +143,7 @@ Changing/resetting a password should revoke all refresh sessions.
 
 ## 13. Browser (web viewer) session
 
-See ADR 0008. The read-only web viewer uses its own cookie scheme, separate from Android JWTs:
+See ADRs 0008 and 0009. The workbook web UI uses its own cookie scheme, separate from Android JWTs:
 
 - browser login only verifies the password; it never creates, rotates or revokes Android devices
   or refresh sessions, so signing in on a PC does not sign the phone out;
@@ -153,6 +153,11 @@ See ADR 0008. The read-only web viewer uses its own cookie scheme, separate from
 - login/logout forms use antiforgery tokens; failed and successful credential POSTs share the
   per-IP login limit; return URLs must be local;
 - `/api/v1` does not accept the browser cookie and keeps its JSON 401 contract;
+- browser report/transaction routes under `/web/books/{year}` require `LajurWeb`,
+  return 401 when the browser session ends, and never accept a bearer token alone;
+- browser POST/PUT/DELETE require the page antiforgery token in `X-Lajur-CSRF`;
+  the authenticated user supplies ownership and writes carry source `WEB`, with
+  no Android device ID. Financial JSON responses are `no-store`;
 - HTML pages send CSP (`default-src 'self'`, no inline script), `frame-ancestors 'none'`,
   `nosniff`, `no-referrer` and `Cache-Control: no-store`.
 

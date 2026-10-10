@@ -23,7 +23,18 @@
     }
 
     <div class="topbar-meta">
-        <span class="badge badge--muted" title="Web viewer hanya membaca data. Tambah/ubah transaksi lewat aplikasi Android.">Hanya-baca</span>
+        <label class="theme-picker">Tema
+            <select class="input input--sm" data-theme-picker aria-label="Tema tampilan">
+                <option value="system">Sistem</option>
+                <option value="light">Terang</option>
+                <option value="dark">Gelap</option>
+            </select>
+        </label>
+        <span class="badge badge--muted" title="Tambah, edit, atau hapus transaksi dari tab bulan.">Transaksi bisa diedit</span>
+        @if (Model.Report is not null)
+        {
+            <button id="refresh-report" type="button" class="button button--ghost button--sm">Muat ulang data</button>
+        }
         <span id="last-updated" class="muted small"></span>
         <span class="user" title="Akun">@Model.Username</span>
         <form method="post" action="/keluar" class="inline-form">
@@ -50,10 +61,7 @@ else if (Model.Report is null)
 else
 {
     <nav class="sheet-tabs" id="sheet-tabs" role="tablist" aria-label="Lembar buku"></nav>
-    <p class="sync-note">
-        Angka dihitung ulang dari tabel transaksi (kolom A:F) dan sheet Master saat halaman dibuka.
-        Transaksi yang masih antre di HP baru terlihat setelah tersinkron.
-    </p>
+    <div id="mutation-status" class="mutation-status" role="status" aria-live="polite" hidden></div>
     <main id="app" class="workspace" aria-live="polite">
         <noscript><p class="alert alert--error">Aktifkan JavaScript untuk melihat tabel dan grafik.</p></noscript>
     </main>
@@ -64,6 +72,6 @@ else
 @section Scripts {
     @if (Model.Report is not null)
     {
-        <script src="~/js/viewer.js" asp-append-version="true"></script>
+        <script type="module" src="~/js/viewer.js" asp-append-version="true"></script>
     }
 }

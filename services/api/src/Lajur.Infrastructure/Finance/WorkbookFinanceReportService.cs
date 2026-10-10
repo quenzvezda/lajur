@@ -37,7 +37,9 @@ public sealed class WorkbookFinanceReportService(OpenXmlWorkbookStore workbookSt
                         row.PaymentMethod,
                         row.Category,
                         row.AmountIdr,
-                        row.Description))
+                        row.Description,
+                        row.TransactionId,
+                        row.Revision))
                     .ToArray())
                 .ToArray(),
             data.Balances

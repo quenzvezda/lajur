@@ -6,4 +6,6 @@ public sealed record WorkbookTransactionRow(
     string PaymentMethod,
     string Category,
     long AmountIdr,
-    string? Description);
+    string? Description,
+    Guid? TransactionId = null,
+    int? Revision = null);

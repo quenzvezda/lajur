@@ -7,7 +7,13 @@ public sealed record ReportRow(
     string PaymentMethod,
     string Category,
     long AmountIdr,
-    string? Description);
+    string? Description,
+    Guid? TransactionId = null,
+    int? Revision = null)
+{
+    /// <summary>Exact editable IDR value, including values outside JavaScript's safe integer range.</summary>
+    public string AmountIdrText => AmountIdr.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}
 
 public sealed record ReportCategory(string Name, string Kind, long? MonthlyBudgetIdr);
 

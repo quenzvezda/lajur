@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.DataProtection;
 namespace Lajur.Api.Web;
 
 /// <summary>
-/// Read-only browser workbook viewer: Razor Pages + a cookie scheme that is separate from the Android
+/// Browser workbook UI: Razor Pages + a cookie scheme that is separate from the Android
 /// JWT scheme. Browser sign-in never creates, rotates or revokes Android device sessions (ADR 0008).
 /// </summary>
 public static class WebViewerSetup
@@ -68,6 +68,7 @@ public static class WebViewerSetup
                 .RequireClaim(UserIdClaim));
 
         services.AddSingleton<ReportClock>();
+        services.AddAntiforgery(options => options.HeaderName = "X-Lajur-CSRF");
         services.AddRazorPages(options =>
         {
             options.Conventions.AuthorizeFolder("/", Policy);
@@ -98,7 +99,7 @@ public static class WebViewerSetup
     public static IApplicationBuilder UseLajurWebSecurityHeaders(this IApplicationBuilder app) =>
         app.Use(async (context, next) =>
         {
-            if (!IsApiRequest(context.Request) && !context.Request.Path.StartsWithSegments("/health"))
+            if (!context.Request.Path.StartsWithSegments("/api") && !context.Request.Path.StartsWithSegments("/health"))
             {
                 context.Response.OnStarting(() =>
                 {
@@ -106,6 +107,7 @@ public static class WebViewerSetup
                     headers["X-Content-Type-Options"] = "nosniff";
                     headers["Referrer-Policy"] = "no-referrer";
                     headers["X-Frame-Options"] = "DENY";
+                    if (context.Request.Path.StartsWithSegments("/web")) headers.CacheControl = "no-store";
                     if (context.Response.ContentType?.StartsWith("text/html", StringComparison.Ordinal) == true)
                     {
                         headers["Content-Security-Policy"] =
@@ -156,5 +158,6 @@ public static class WebViewerSetup
         await context.HttpContext.SignOutAsync(Scheme);
     }
 
-    private static bool IsApiRequest(HttpRequest request) => request.Path.StartsWithSegments("/api");
+    private static bool IsApiRequest(HttpRequest request) =>
+        request.Path.StartsWithSegments("/api") || request.Path.StartsWithSegments("/web");
 }

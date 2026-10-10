@@ -2,6 +2,8 @@
 
 **Status:** Proposed (implemented as an MVP slice on 2026-10-07; awaiting owner review)
 
+**2026-10-10:** [ADR 0009](0009-browser-monthly-transaction-mutations.md) supersedes the read-only transaction restriction for monthly web CRUD. The separate browser session and read-only GET rules below remain applicable.
+
 ## Context
 
 The owner wants to see workbook information from a PC browser (monthly tables, category pivot,

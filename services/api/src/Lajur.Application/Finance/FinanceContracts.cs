@@ -34,8 +34,18 @@ public sealed record FinanceTransactionDraft(
     long AmountIdr,
     string? Description);
 
+public enum FinanceWriteSource { Android, Web }
+
+/// <summary>The authenticated channel; browser writes never invent an Android device.</summary>
+public sealed record FinanceWriteActor(FinanceWriteSource Source, Guid? DeviceId)
+{
+    public static FinanceWriteActor Android(Guid deviceId) => new(FinanceWriteSource.Android, deviceId);
+    public static FinanceWriteActor Web { get; } = new(FinanceWriteSource.Web, null);
+}
+
 public interface IFinanceService
 {
+    Task<FinanceTransaction?> GetTransactionAsync(Guid userId, int year, Guid transactionId, CancellationToken cancellationToken);
     Task<FinanceMasterData> GetMasterDataAsync(Guid userId, int year, CancellationToken cancellationToken);
     Task<IReadOnlyList<FinanceTransaction>> ListTransactionsAsync(
         Guid userId,
@@ -50,14 +60,14 @@ public interface IFinanceService
         CancellationToken cancellationToken);
     Task<FinanceTransaction> CreateTransactionAsync(
         Guid userId,
-        Guid deviceId,
+        FinanceWriteActor actor,
         string correlationId,
         Guid transactionId,
         FinanceTransactionDraft transaction,
         CancellationToken cancellationToken);
     Task<FinanceTransaction> UpdateTransactionAsync(
         Guid userId,
-        Guid deviceId,
+        FinanceWriteActor actor,
         string correlationId,
         int workbookYear,
         Guid transactionId,
@@ -66,7 +76,7 @@ public interface IFinanceService
         CancellationToken cancellationToken);
     Task DeleteTransactionAsync(
         Guid userId,
-        Guid deviceId,
+        FinanceWriteActor actor,
         string correlationId,
         int workbookYear,
         Guid transactionId,

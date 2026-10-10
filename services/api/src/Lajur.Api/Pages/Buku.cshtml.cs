@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace Lajur.Api.Pages;
 
 /// <summary>
-/// Read-only workbook viewer for one user/year. Every number comes from one consistent workbook read;
+/// Workbook UI for one user/year. Every number comes from one consistent workbook read;
 /// opening this page never writes, imports, migrates or recalculates the workbook.
 /// </summary>
 public sealed class BukuModel(

@@ -24,7 +24,8 @@ public enum WorkbookChangeSource
 {
     Android,
     ExcelImport,
-    System
+    System,
+    Web
 }
 
 public sealed record WorkbookAuditContext(

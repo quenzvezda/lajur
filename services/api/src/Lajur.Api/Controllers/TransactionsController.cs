@@ -43,7 +43,7 @@ public sealed class TransactionsController(IFinanceService financeService) : Con
 
         var created = await financeService.CreateTransactionAsync(
             userId,
-            deviceId,
+            FinanceWriteActor.Android(deviceId),
             HttpContext.TraceIdentifier,
             request.TransactionId,
             request.ToDraft(),
@@ -65,7 +65,7 @@ public sealed class TransactionsController(IFinanceService financeService) : Con
 
         return Ok(await financeService.UpdateTransactionAsync(
             userId,
-            deviceId,
+            FinanceWriteActor.Android(deviceId),
             HttpContext.TraceIdentifier,
             year,
             transactionId,
@@ -88,7 +88,7 @@ public sealed class TransactionsController(IFinanceService financeService) : Con
 
         await financeService.DeleteTransactionAsync(
             userId,
-            deviceId,
+            FinanceWriteActor.Android(deviceId),
             HttpContext.TraceIdentifier,
             year,
             transactionId,

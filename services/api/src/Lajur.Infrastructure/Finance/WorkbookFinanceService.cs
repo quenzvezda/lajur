@@ -8,6 +8,13 @@ public sealed class WorkbookFinanceService(
     OpenXmlWorkbookStore workbookStore,
     ILogger<WorkbookFinanceService> logger) : IFinanceService
 {
+    public async Task<FinanceTransaction?> GetTransactionAsync(
+        Guid userId, int year, Guid transactionId, CancellationToken cancellationToken)
+    {
+        var transaction = await workbookStore.GetTransactionAsync(new WorkbookKey(userId, year), transactionId, cancellationToken);
+        return transaction is null ? null : Map(transaction);
+    }
+
     public async Task<FinanceMasterData> GetMasterDataAsync(
         Guid userId,
         int year,
@@ -66,7 +73,7 @@ public sealed class WorkbookFinanceService(
 
     public async Task<FinanceTransaction> CreateTransactionAsync(
         Guid userId,
-        Guid deviceId,
+        FinanceWriteActor actor,
         string correlationId,
         Guid transactionId,
         FinanceTransactionDraft transaction,
@@ -77,7 +84,7 @@ public sealed class WorkbookFinanceService(
             new CreateWorkbookTransactionCommand(
                 transactionId,
                 Map(transaction),
-                Audit(deviceId, correlationId)),
+                Audit(actor, correlationId)),
             cancellationToken);
         LogMutation("create", userId, transaction.Date.Year, transactionId, result.Revision);
         return Map(result);
@@ -85,7 +92,7 @@ public sealed class WorkbookFinanceService(
 
     public async Task<FinanceTransaction> UpdateTransactionAsync(
         Guid userId,
-        Guid deviceId,
+        FinanceWriteActor actor,
         string correlationId,
         int workbookYear,
         Guid transactionId,
@@ -99,7 +106,7 @@ public sealed class WorkbookFinanceService(
                 transactionId,
                 expectedRevision,
                 Map(transaction),
-                Audit(deviceId, correlationId)),
+                Audit(actor, correlationId)),
             cancellationToken);
         LogMutation("update", userId, workbookYear, transactionId, result.Revision);
         return Map(result);
@@ -107,7 +114,7 @@ public sealed class WorkbookFinanceService(
 
     public async Task DeleteTransactionAsync(
         Guid userId,
-        Guid deviceId,
+        FinanceWriteActor actor,
         string correlationId,
         int workbookYear,
         Guid transactionId,
@@ -119,7 +126,7 @@ public sealed class WorkbookFinanceService(
             new DeleteWorkbookTransactionCommand(
                 transactionId,
                 expectedRevision,
-                Audit(deviceId, correlationId)),
+                Audit(actor, correlationId)),
             cancellationToken);
         LogMutation("delete", userId, workbookYear, transactionId, expectedRevision + 1);
     }
@@ -139,8 +146,13 @@ public sealed class WorkbookFinanceService(
         || transaction.Category.Contains(query, StringComparison.OrdinalIgnoreCase)
         || (transaction.Description?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false);
 
-    private static WorkbookAuditContext Audit(Guid deviceId, string correlationId) =>
-        new(WorkbookChangeSource.Android, deviceId.ToString("D"), correlationId);
+    private static WorkbookAuditContext Audit(FinanceWriteActor actor, string correlationId) => actor switch
+    {
+        { Source: FinanceWriteSource.Android, DeviceId: { } deviceId } when deviceId != Guid.Empty =>
+            new(WorkbookChangeSource.Android, deviceId.ToString("D"), correlationId),
+        { Source: FinanceWriteSource.Web, DeviceId: null } => new(WorkbookChangeSource.Web, null, correlationId),
+        _ => throw new ArgumentException("Invalid authenticated write actor.", nameof(actor))
+    };
 
     private static WorkbookTransactionDraft Map(FinanceTransactionDraft transaction) => new(
         transaction.Date,

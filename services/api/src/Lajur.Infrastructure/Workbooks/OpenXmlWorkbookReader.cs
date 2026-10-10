@@ -40,7 +40,8 @@ public sealed partial class OpenXmlWorkbookReader
 
     public IReadOnlyList<WorkbookTransactionRow> ReadMonthlyTransactions(
         string workbookPath,
-        int month)
+        int month,
+        bool includeIdentity = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workbookPath);
 
@@ -91,6 +92,11 @@ public sealed partial class OpenXmlWorkbookReader
             ?? throw InvalidWorkbook($"Sheet '{monthDefinition.SheetName}' does not contain sheet data.");
 
         var transactions = new List<WorkbookTransactionRow>();
+        var identities = includeIdentity
+            ? ReadIndexedEntries(workbookPath)
+                .Where(entry => entry.Transaction.Date.Month == month)
+                .ToDictionary(entry => entry.ExcelRow, entry => entry.Transaction)
+            : null;
 
         foreach (var row in sheetData.Elements<Row>().Where(candidate =>
                      candidate.RowIndex?.Value > range.StartRow
@@ -105,7 +111,15 @@ public sealed partial class OpenXmlWorkbookReader
                 continue;
             }
 
-            transactions.Add(ParseTransaction(values, monthDefinition, row.RowIndex!.Value));
+            var transaction = ParseTransaction(values, monthDefinition, row.RowIndex!.Value);
+            if (identities?.TryGetValue(row.RowIndex.Value, out var indexed) == true
+                && indexed.Date == transaction.Date && indexed.Type == transaction.Type
+                && indexed.PaymentMethod == transaction.PaymentMethod && indexed.Category == transaction.Category
+                && indexed.AmountIdr == transaction.AmountIdr && indexed.Description == transaction.Description)
+            {
+                transaction = transaction with { TransactionId = indexed.TransactionId, Revision = indexed.Revision };
+            }
+            transactions.Add(transaction);
         }
 
         return transactions;
@@ -300,7 +314,12 @@ public sealed partial class OpenXmlWorkbookReader
             : throw InvalidWorkbook("Workbook content contains conflicting years.");
     }
 
-    private static IReadOnlyList<WorkbookTransaction> ReadIndexedTransactions(string workbookPath)
+    private static IReadOnlyList<WorkbookTransaction> ReadIndexedTransactions(string workbookPath) =>
+        ReadIndexedEntries(workbookPath).Select(entry => entry.Transaction).ToArray();
+
+    private sealed record IndexedTransaction(uint ExcelRow, WorkbookTransaction Transaction);
+
+    private static IReadOnlyList<IndexedTransaction> ReadIndexedEntries(string workbookPath)
     {
         using var document = SpreadsheetDocument.Open(workbookPath, false);
         var workbookPart = document.WorkbookPart
@@ -323,7 +342,9 @@ public sealed partial class OpenXmlWorkbookReader
 
         var rows = worksheetPart.Worksheet?.GetFirstChild<SheetData>()?.Elements<Row>().Skip(1)
             ?? [];
-        var transactions = new List<WorkbookTransaction>();
+        var transactions = new List<IndexedTransaction>();
+        var identities = new HashSet<Guid>();
+        var locations = new HashSet<(int Year, int Month, uint Row)>();
 
         foreach (var row in rows)
         {
@@ -333,19 +354,25 @@ public sealed partial class OpenXmlWorkbookReader
                 continue;
             }
 
-            if (!Guid.TryParse(idText, out var transactionId)
+            if (!Guid.TryParse(idText, out var transactionId) || transactionId == Guid.Empty
                 || !int.TryParse(ReadSystemCell(FindCell(row, 2)), CultureInfo.InvariantCulture, out var year)
                 || !int.TryParse(ReadSystemCell(FindCell(row, 3)), CultureInfo.InvariantCulture, out var month)
+                || !uint.TryParse(ReadSystemCell(FindCell(row, 4)), CultureInfo.InvariantCulture, out var excelRow)
+                || excelRow < 1
                 || !int.TryParse(ReadSystemCell(FindCell(row, 5)), CultureInfo.InvariantCulture, out var revision))
             {
                 throw InvalidWorkbook($"System index row {row.RowIndex?.Value} is invalid.");
             }
+
+            if (!identities.Add(transactionId)) throw InvalidWorkbook("System index contains duplicate transaction IDs.");
 
             var isDeleted = ReadSystemCell(FindCell(row, 8)) is "1" or "true" or "TRUE";
             if (isDeleted)
             {
                 continue;
             }
+
+            if (!locations.Add((year, month, excelRow))) throw InvalidWorkbook("System index contains duplicate transaction locations.");
 
             var snapshotJson = ReadSystemCell(FindCell(row, 7));
             var expectedHash = ReadSystemCell(FindCell(row, 6));
@@ -384,7 +411,7 @@ public sealed partial class OpenXmlWorkbookReader
                 throw InvalidWorkbook($"System index row {row.RowIndex?.Value} has inconsistent transaction data.");
             }
 
-            transactions.Add(new WorkbookTransaction(
+            transactions.Add(new IndexedTransaction(excelRow, new WorkbookTransaction(
                 transactionId,
                 revision,
                 date,
@@ -392,7 +419,7 @@ public sealed partial class OpenXmlWorkbookReader
                 snapshot.PaymentMethod,
                 snapshot.Category,
                 snapshot.AmountIdr,
-                string.IsNullOrWhiteSpace(snapshot.Description) ? null : snapshot.Description));
+                string.IsNullOrWhiteSpace(snapshot.Description) ? null : snapshot.Description)));
         }
 
         return transactions;

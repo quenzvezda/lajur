@@ -1,7 +1,10 @@
-// Lajur read-only workbook viewer.
+import { createTransactionEditor } from './transactions.js';
+import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
+
+// Lajur workbook UI. Reports remain server-computed; browser commands use stable transaction IDs.
 // Renders the server-computed YearReport (embedded as JSON). Headline totals always come from the
 // server; anything computed here is either presentation (sorting, filtering) or explicitly labelled
-// as "filtered". Nothing here writes back to the server.
+// as "filtered". Transaction drafts are committed through the separate browser command boundary.
 (() => {
   'use strict';
 
@@ -11,7 +14,7 @@
   const popoverRoot = document.getElementById('popover-root');
   if (!dataElement || !app || !tabsHost) return;
 
-  const report = JSON.parse(dataElement.textContent);
+  let report = JSON.parse(dataElement.textContent);
   const INCOME = 'Pemasukan';
   const EXPENSE = 'Pengeluaran';
   const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
@@ -23,7 +26,7 @@
   // ---------- formatting ----------
   const numberFormat = new Intl.NumberFormat('id-ID');
   const fmt = (value) => numberFormat.format(value);
-  const rupiah = (value) => (value < 0 ? '−Rp ' : 'Rp ') + fmt(Math.abs(value));
+  const rupiah = (value) => (value < 0 ? '−Rp ' : 'Rp ') + fmt(value < 0 ? -value : value);
   const signedRupiah = (value) => (value > 0 ? '+' : '') + rupiah(value);
   const percent = (ratio, digits = 1) =>
     ratio === null || ratio === undefined || !Number.isFinite(ratio)
@@ -77,7 +80,9 @@
   // ---------- tooltip ----------
   const tooltip = h('div', { class: 'tooltip', role: 'status', hidden: true });
   document.body.append(tooltip);
+  let tooltipAnchor = null;
   function showTooltip(event, lines) {
+    tooltipAnchor = event.currentTarget;
     tooltip.replaceChildren(...lines.map((line) =>
       typeof line === 'string' ? h('div', { text: line }) : line));
     tooltip.hidden = false;
@@ -90,10 +95,17 @@
     tooltip.style.setProperty('left', `${Math.max(8, x)}px`);
     tooltip.style.setProperty('top', `${Math.max(8, y)}px`);
   }
-  const hideTooltip = () => { tooltip.hidden = true; };
+  const hideTooltip = () => { tooltip.hidden = true; tooltipAnchor = null; };
+  document.addEventListener('pointermove', event => {
+    if (tooltipAnchor && !tooltipAnchor.contains(event.target)) hideTooltip();
+  }, true);
+  document.addEventListener('scroll', hideTooltip, true);
+  document.addEventListener('visibilitychange', hideTooltip);
+  window.addEventListener('blur', hideTooltip);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') hideTooltip(); });
 
   // ---------- state & routing ----------
-  const allRows = report.months.flatMap((month) =>
+  let allRows = report.months.flatMap((month) =>
     month.rows.map((row, index) => ({ ...row, month: month.month, line: index + 1 })));
   const views = [
     { key: 'rekap', label: 'Rekap', kind: 'rekap' },
@@ -104,6 +116,50 @@
   const tableStates = new Map();
   let currentView = null;
   let resizeHandlers = [];
+  let composing = false, renderAfterComposition = false;
+  app.addEventListener('compositionstart', () => { composing = true; });
+  app.addEventListener('compositionend', () => {
+    composing = false;
+    if (renderAfterComposition) { renderAfterComposition = false; queueMicrotask(render); }
+  });
+
+  const mutationStatus = document.getElementById('mutation-status');
+  let toastTimer;
+  const dismissToast = () => { clearTimeout(toastTimer); mutationStatus.hidden = true; };
+  const expireToast = () => { clearTimeout(toastTimer); toastTimer = setTimeout(dismissToast, 6000); };
+  mutationStatus.addEventListener('mouseenter', () => clearTimeout(toastTimer));
+  mutationStatus.addEventListener('mouseleave', expireToast);
+  mutationStatus.addEventListener('focusin', () => clearTimeout(toastTimer));
+  mutationStatus.addEventListener('focusout', expireToast);
+  function notify(message, row) {
+    const month = row ? Number(row.date.slice(5, 7)) : null;
+    const stored = row && report.months[month - 1].rows.find(r => r.transactionId === row.transactionId);
+    const visible = stored && applyFilters([stored], tableState(`m${month}`), COLUMNS.filter(c => !c.allOnly)).length > 0;
+    mutationStatus.replaceChildren(...[h('span', { text: message + (stored && !visible ? ' Transaksi berada di luar filter saat ini.' : '') }),
+      row ? h('button', { type: 'button', class: 'button button--ghost button--sm', text: 'Lihat transaksi', onclick: () => {
+        const state = tableState(`m${month}`); state.filters = {}; state.search = ''; state.selected = row.transactionId;
+        go(MONTH_KEYS[month - 1]);
+        dismissToast();
+      } }) : null,
+      h('button', { type: 'button', class: 'button button--ghost button--sm', 'aria-label': 'Tutup notifikasi', text: '×', onclick: dismissToast })].filter(Boolean));
+    mutationStatus.hidden = false;
+    expireToast();
+  }
+  async function refreshReport() {
+    const response = await fetch(`/web/books/${report.year}/report`, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('Data belum dapat dimuat. Periksa koneksi dan sesi login.');
+    const next = await response.json();
+    if (next.year !== report.year || next.months?.length !== 12) throw new Error('Laporan tidak valid.');
+    report = next;
+    allRows = report.months.flatMap(month => month.rows.map((row, index) => ({ ...row, month: month.month, line: index + 1 })));
+    views.filter(view => view.kind === 'month').forEach(view => { view.count = report.months[view.month - 1].transactionCount; });
+    updateTimestamp();
+  }
+  const transactions = createTransactionEditor({ h, getReport: () => report, refreshReport, render, notify });
+  window.addEventListener('lajur-theme-change', render);
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (!document.documentElement.dataset.theme) render();
+  });
 
   function defaultViewKey() {
     const now = new Date();
@@ -139,6 +195,11 @@
   }
 
   function render() {
+    if (composing) { renderAfterComposition = true; return; }
+    const focused = document.activeElement;
+    const editorFocus = focused?.id?.startsWith('transaction-editor-') ? {
+      id: focused.id, start: focused.selectionStart, end: focused.selectionEnd
+    } : null;
     closePopover();
     hideTooltip();
     resizeHandlers = [];
@@ -153,6 +214,11 @@
     document.title = `${currentView.kind === 'month' ? MONTH_LONG[currentView.month - 1] : currentView.label} ${report.year} · Lajur`;
     runResizeHandlers();
     window.scrollTo({ top: scroll });
+    if (previous === currentView && editorFocus) {
+      const input = document.getElementById(editorFocus.id);
+      input?.focus({ preventScroll: true });
+      if (editorFocus.start !== null && editorFocus.start !== undefined && input?.setSelectionRange) input.setSelectionRange(editorFocus.start, editorFocus.end);
+    }
   }
 
   function runResizeHandlers() { resizeHandlers.forEach((handler) => handler()); }
@@ -195,7 +261,7 @@
     const name = `${MONTH_LONG[month.month - 1]} ${report.year}`;
     const tableKey = `m${month.month}`;
     const rows = month.rows.map((row, index) => ({ ...row, month: month.month, line: index + 1 }));
-    const table = transactionTable(tableKey, rows, { showMonth: false, exportName: MONTH_SHORT[month.month - 1] });
+    const table = transactionTable(tableKey, rows, { showMonth: false, exportName: MONTH_SHORT[month.month - 1], editable: true, month: month.month });
 
     const head = h('div', { class: 'view-head' },
       h('div', null,
@@ -236,11 +302,11 @@
     resizeHandlers.push(() => drawDailyChart(dailyHost, month));
 
     return h('div', { class: 'view' },
-      head, kpis, balances,
+      head, transactions.editor(month.month), kpis, balances,
       h('div', { class: 'split' },
-        h('div', { class: 'split-main' }, panel('Tabel transaksi', table, { className: 'panel--table' })),
+        h('div', { class: 'split-main side-stack' },
+          panel('Tabel transaksi', table, { className: 'panel--table' }), daily),
         h('aside', { class: 'split-side' }, side)),
-      daily,
       h('div', { class: 'two-col' },
         projectionPanel(month),
         h('div', { class: 'side-stack' }, pacePanel(month), comparisonPanel(month))));
@@ -457,12 +523,12 @@
   ];
 
   function tableState(key) {
-    if (!tableStates.has(key)) tableStates.set(key, { search: '', sort: null, filters: {}, selected: null });
+    if (!tableStates.has(key)) tableStates.set(key, { search: '', sort: { key: 'date', dir: 'desc' }, filters: {}, selected: null });
     return tableStates.get(key);
   }
 
   const cellText = (row, column) => {
-    const value = row[column.key];
+    const value = column.key === 'amountIdr' ? row.amountIdrText ?? row.amountIdr : row[column.key];
     return value === null || value === undefined ? '' : String(value);
   };
 
@@ -476,8 +542,9 @@
         if (filter instanceof Set) {
           if (!filter.has(cellText(row, column))) return false;
         } else if (column.filter === 'range') {
-          if (filter.min !== null && row[column.key] < filter.min) return false;
-          if (filter.max !== null && row[column.key] > filter.max) return false;
+          const amount = BigInt(row.amountIdrText ?? String(row[column.key]));
+          if (filter.min !== null && amount < filter.min) return false;
+          if (filter.max !== null && amount > filter.max) return false;
         } else if (column.filter === 'text') {
           if (!cellText(row, column).toLocaleLowerCase('id-ID').includes(filter.text)) return false;
         }
@@ -490,7 +557,7 @@
 
   function sortRows(rows, state, columns) {
     const sort = state.sort;
-    if (!sort) return rows;
+    if (!sort) return [...rows].sort((a, b) => b.date.localeCompare(a.date) || b.line - a.line);
     const column = columns.find((c) => c.key === sort.key);
     if (!column) return rows;
     const direction = sort.dir === 'desc' ? -1 : 1;
@@ -532,6 +599,7 @@
     };
 
     const toolbar = (visible) => {
+      const selected = visibleRows.find(row => (row.transactionId || `${row.month}:${row.line}`) === state.selected);
       const chips = columns.filter((c) => state.filters[c.key]).map((column) =>
         h('button', {
           type: 'button', class: 'chip', title: 'Hapus filter ini',
@@ -540,6 +608,9 @@
       const hasAny = chips.length > 0 || state.search || state.sort;
       return [
         h('div', { class: 'chips' }, chips),
+        options.editable && selected ? h('div', { class: 'tx-selected-actions' },
+          h('span', { class: 'muted small', text: `Dipilih: ${formatDate(selected.date)} · ${selected.category}` }),
+          transactions.actions(selected, options.month)) : null,
         h('div', { class: 'tx-toolbar-end' },
           h('span', { class: 'muted small', text: visible === rows.length ? `${rows.length} baris` : `${visible} dari ${rows.length} baris` }),
           h('button', {
@@ -547,7 +618,7 @@
             title: 'Unduh baris yang sedang tampil (sesuai filter & urutan) sebagai CSV',
             text: 'Ekspor CSV', onclick: () => downloadCsv(visibleRows, options.exportName, visible !== rows.length)
           }),
-          hasAny ? h('button', { type: 'button', class: 'button button--ghost button--sm', text: 'Reset', onclick: () => { state.filters = {}; state.search = ''; state.sort = null; draw(); } }) : null)];
+          hasAny ? h('button', { type: 'button', class: 'button button--ghost button--sm', text: 'Reset', onclick: () => { state.filters = {}; state.search = ''; state.sort = { key: 'date', dir: 'desc' }; draw(); } }) : null)].filter(Boolean);
     };
 
     const grid = (filtered) => {
@@ -572,32 +643,34 @@
             onclick: (event) => { event.stopPropagation(); openFilter(event.currentTarget, column, rows, state, columns, draw); }
           }, h('span', { 'aria-hidden': 'true', text: isFiltered ? '⏷' : '▾' }))));
       }));
+      if (options.editable) headRow.append(h('th', { scope: 'col', text: 'Aksi' }));
 
       const body = filtered.length === 0
-        ? h('tr', null, h('td', { class: 'tx-empty', colspan: String(columns.length), text: rows.length === 0 ? 'Belum ada transaksi.' : 'Tidak ada baris yang cocok dengan filter.' }))
+        ? h('tr', null, h('td', { class: 'tx-empty', colspan: String(columns.length + (options.editable ? 1 : 0)), text: rows.length === 0 ? 'Belum ada transaksi.' : 'Tidak ada baris yang cocok dengan filter.' }))
         : filtered.map((row) => {
-          const id = `${row.month}:${row.line}`;
+          const id = row.transactionId || `${row.month}:${row.line}`;
           return h('tr', {
             class: [state.selected === id && 'is-selected'],
+            dataset: { transactionId: row.transactionId || '' },
             onclick: () => { state.selected = state.selected === id ? null : id; draw(); }
           }, columns.map((column) => {
             if (column.key === 'type') return h('td', null, typePill(row.type));
-            if (column.key === 'amountIdr') return h('td', { class: ['num', 'amount', typeClass(row.type)], text: fmt(row.amountIdr) });
+            if (column.key === 'amountIdr') return h('td', { class: ['num', 'amount', typeClass(row.type)], text: fmt(BigInt(row.amountIdrText ?? String(row.amountIdr))) });
             if (column.key === 'paymentMethod' && !row.paymentMethod) return h('td', { class: 'muted', title: 'Pembayaran kosong — tetap dihitung dalam total', text: '—' });
             if (column.key === 'description') return h('td', { class: 'col-desc' }, h('div', { class: 'desc', text: row.description || '' }));
             if (column.key === 'line') return h('td', { class: 'col-line', text: row.line });
             return h('td', { class: column.className, text: column.display ? column.display(row) : cellText(row, column) });
-          }));
+          }), options.editable ? h('td', null, transactions.actions(row, options.month)) : null);
         });
 
       return h('div', { class: 'tx-scroll' }, h('table', { class: 'grid' }, h('thead', null, headRow), h('tbody', null, body)));
     };
 
     const footer = (filtered, active) => {
-      let income = 0; let expense = 0;
+      let income = 0n; let expense = 0n;
       for (const row of filtered) {
-        if (row.type === INCOME) income += row.amountIdr;
-        else if (row.type === EXPENSE) expense += row.amountIdr;
+        if (row.type === INCOME) income += BigInt(row.amountIdrText ?? String(row.amountIdr));
+        else if (row.type === EXPENSE) expense += BigInt(row.amountIdrText ?? String(row.amountIdr));
       }
       return h('div', { class: ['tx-footer', active && 'is-filtered'] },
         h('span', { class: 'tx-footer-label', text: active ? 'Total baris terfilter' : 'Total tabel' }),
@@ -622,7 +695,7 @@
     };
     const header = ['Bulan', 'Tanggal', 'Tipe', 'Pembayaran', 'Kategori', 'Jumlah (Rp)', 'Keterangan'];
     const lines = [header.join(';')].concat(rows.map((row) => [
-      MONTH_SHORT[row.month - 1], row.date, row.type, row.paymentMethod, row.category, row.amountIdr, row.description
+      MONTH_SHORT[row.month - 1], row.date, row.type, row.paymentMethod, row.category, row.amountIdrText ?? row.amountIdr, row.description
     ].map(cell).join(';')));
     const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -710,12 +783,18 @@
       };
     } else if (column.filter === 'range') {
       const current = state.filters[column.key] || { min: null, max: null };
-      const min = h('input', { type: 'number', class: 'input input--sm', inputmode: 'numeric', placeholder: 'Minimum', value: current.min ?? '' });
-      const max = h('input', { type: 'number', class: 'input input--sm', inputmode: 'numeric', placeholder: 'Maksimum', value: current.max ?? '' });
+      const min = h('input', { type: 'text', class: 'input input--sm', inputmode: 'numeric', maxlength: 32, placeholder: 'Minimum', value: current.min === null ? '' : fmt(current.min) });
+      const max = h('input', { type: 'text', class: 'input input--sm', inputmode: 'numeric', maxlength: 32, placeholder: 'Maksimum', value: current.max === null ? '' : fmt(current.max) });
+      bindGroupedAmountInput(min, true); bindGroupedAmountInput(max, true);
       body = h('div', { class: 'pop-range' }, h('label', null, 'Dari', min), h('label', null, 'Sampai', max));
       apply = () => {
-        const lo = min.value === '' ? null : Number(min.value);
-        const hi = max.value === '' ? null : Number(max.value);
+        min.setCustomValidity(''); max.setCustomValidity('');
+        const lo = min.value.trim() === '' ? null : parseIdrAmount(min.value, true);
+        const hi = max.value.trim() === '' ? null : parseIdrAmount(max.value, true);
+        for (const [input, value] of [[min, lo], [max, hi]]) {
+          if (input.value.trim() && value === null) { input.setCustomValidity('Masukkan rupiah bulat, misalnya 100000 atau 100.000.'); input.reportValidity(); return false; }
+        }
+        if (lo !== null && hi !== null && lo > hi) { max.setCustomValidity('Batas Sampai harus sama atau lebih besar dari Dari.'); max.reportValidity(); return false; }
         if (lo === null && hi === null) delete state.filters[column.key];
         else state.filters[column.key] = { min: lo, max: hi };
       };
@@ -735,9 +814,9 @@
       body,
       h('div', { class: 'pop-actions' },
         h('button', { type: 'button', class: 'button button--ghost button--sm', text: 'Hapus filter', onclick: () => { delete state.filters[column.key]; closePopover(); redraw(); } }),
-        h('button', { type: 'button', class: 'button button--primary button--sm', text: 'Terapkan', onclick: () => { apply(); closePopover(); redraw(); } })));
+        h('button', { type: 'button', class: 'button button--primary button--sm', text: 'Terapkan', onclick: () => { if (apply() === false) return; closePopover(); redraw(); } })));
     popover.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && event.target.tagName === 'INPUT' && event.target.type !== 'checkbox') { apply(); closePopover(); redraw(); }
+      if (event.key === 'Enter' && event.target.tagName === 'INPUT' && event.target.type !== 'checkbox') { event.preventDefault(); if (apply() === false) return; closePopover(); redraw(); }
     });
     popoverRoot.append(popover);
     openPopover = popover;
@@ -1097,11 +1176,21 @@
   }
 
   // ---------- boot ----------
-  const updated = document.getElementById('last-updated');
-  if (updated) {
+  function updateTimestamp() {
+    const updated = document.getElementById('last-updated');
+    if (!updated) return;
     const when = new Date(report.lastModifiedAtUtc);
     updated.textContent = `Workbook diperbarui ${when.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}`;
     updated.title = when.toISOString();
   }
+  document.getElementById('refresh-report')?.addEventListener('click', async event => {
+    if (transactions.isBusy()) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try { await refreshReport(); notify('Data terbaru dimuat. Draft yang belum disimpan tetap tersedia.'); render(); }
+    catch (error) { notify(error.message); }
+    finally { button.disabled = false; }
+  });
+  updateTimestamp();
   render();
 })();

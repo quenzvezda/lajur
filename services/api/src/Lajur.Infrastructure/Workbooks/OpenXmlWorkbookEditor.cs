@@ -1220,6 +1220,7 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
     private static string FormatSource(WorkbookChangeSource source) => source switch
     {
         WorkbookChangeSource.Android => "ANDROID",
+        WorkbookChangeSource.Web => "WEB",
         WorkbookChangeSource.ExcelImport => "EXCEL_IMPORT",
         WorkbookChangeSource.System => "SYSTEM",
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null)

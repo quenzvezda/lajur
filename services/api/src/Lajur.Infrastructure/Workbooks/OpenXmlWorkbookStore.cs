@@ -108,6 +108,7 @@ public sealed class OpenXmlWorkbookStore
                     .PrepareGeneratedWorkbook(key, audit, timeProvider.GetUtcNow());
                 ValidateWorkbook(tempPath, key.Year);
                 File.Move(tempPath, activePath, overwrite: false);
+                yearCache.TryRemove(key, out _);
                 return result;
             }
             finally
@@ -191,6 +192,7 @@ public sealed class OpenXmlWorkbookStore
                 }
 
                 File.Move(tempPath, activePath, overwrite: true);
+                yearCache.TryRemove(key, out _);
                 return new StoredWorkbookImportResult(migration, replacing, backupFileName);
             }
             finally
@@ -307,7 +309,7 @@ public sealed class OpenXmlWorkbookStore
                 var incomeSources = new IReadOnlyList<WorkbookIncomeSourceInput>?[12];
                 for (var month = 1; month <= 12; month++)
                 {
-                    months[month - 1] = reader.ReadMonthlyTransactions(path, month);
+                    months[month - 1] = reader.ReadMonthlyTransactions(path, month, includeIdentity: true);
                     balances[month - 1] = reader.ReadMonthBalanceInputs(path, month);
                     incomeSources[month - 1] = reader.ReadIncomeSourceInputs(path, month);
                 }
@@ -430,6 +432,7 @@ public sealed class OpenXmlWorkbookStore
 
                 ValidateWorkbook(tempPath, key.Year);
                 File.Move(tempPath, activePath, overwrite: true);
+                yearCache.TryRemove(key, out _);
                 return result;
             }
             finally

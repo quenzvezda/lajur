@@ -78,6 +78,8 @@ Owns:
 - revision checks;
 - audit trail;
 - atomic workbook replacement;
+- browser workbook UI and a separate cookie session with antiforgery-protected
+  monthly transaction commands (ADR 0009);
 - import/export;
 - backup lifecycle.
 
@@ -112,7 +114,7 @@ This is not a collaborative editor.
 
 - v1: one active Android device per account.
 - all workbook writes for a user/year are serialized by the API;
-- Android uses optimistic revisions for update/delete;
+- Android and the browser use optimistic revisions for update/delete;
 - create is idempotent by client-generated transaction ID;
 - direct concurrent editing of the active server file is unsupported;
 - Excel manual editing is supported through export → edit → import, with reconciliation where metadata is available.
