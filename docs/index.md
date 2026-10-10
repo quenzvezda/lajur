@@ -64,5 +64,6 @@
 - [Glossary](reference/GLOSSARY.md)
 - [Open questions](reference/OPEN_QUESTIONS.md)
 - [Research notes](reference/RESEARCH_NOTES.md)
+- [Web finance editing research and UX proposal](reference/WEB_FINANCE_EDITING_RESEARCH.md)
 - [Agent access to VPS and deployment research](reference/VPS_AGENT_DEPLOYMENT_RESEARCH.md)
 - [OCR baseline](reference/OCR_BASELINE.md)
