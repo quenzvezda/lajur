@@ -247,6 +247,14 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
         using var document = SpreadsheetDocument.Open(workbookPath, true, new OpenSettings { AutoSave = false });
         var workbookPart = RequiredWorkbookPart(document);
 
+        if (RequiredWorkbook(workbookPart).Sheets!.Elements<Sheet>().Any(sheet => sheet.Name == MasterSupplement.SheetName))
+        {
+            var title = WorkbookSettingsMap.Text(workbookPart, WorkbookSettingsMap.Cell(FindWorksheetPart(workbookPart, MasterSupplement.SheetName), "A1"));
+            var match = Regex.Match(title, "^LAJUR — REKAP MASTER ([0-9]{4})$");
+            if (!match.Success) throw InvalidWorkbook("Managed Master report has an unknown title.");
+            MasterSupplement.Validate(workbookPart, masterData with { WorkbookYear = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) });
+            MasterSupplement.Write(workbookPart, masterData with { WorkbookYear = key.Year });
+        }
         PatchKnownYearContent(workbookPart, key.Year);
         ClearMonthlyTransactions(workbookPart);
 

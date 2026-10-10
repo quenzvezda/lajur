@@ -1,6 +1,8 @@
 import { createTransactionEditor } from './transactions.js';
 import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
 import { createWorkbookSettingsEditor } from './settings.js';
+import { createMasterEditor } from './master.js';
+import { paymentLabel } from './payment-icons.js';
 
 // Lajur workbook UI. Reports remain server-computed; browser commands use stable transaction IDs.
 // Renders the server-computed YearReport (embedded as JSON). Headline totals always come from the
@@ -158,6 +160,7 @@ import { createWorkbookSettingsEditor } from './settings.js';
   }
   const transactions = createTransactionEditor({ h, getReport: () => report, refreshReport, render, notify });
   const settings = createWorkbookSettingsEditor({ h, getReport: () => report, refreshReport, render, notify, monthNames: MONTH_LONG });
+  const masterEditor = createMasterEditor({ h, getReport: () => report, refreshReport, render, notify });
   window.addEventListener('lajur-theme-change', render);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if (!document.documentElement.dataset.theme) render();
@@ -660,6 +663,7 @@ import { createWorkbookSettingsEditor } from './settings.js';
             if (column.key === 'type') return h('td', null, typePill(row.type));
             if (column.key === 'amountIdr') return h('td', { class: ['num', 'amount', typeClass(row.type)], text: fmt(BigInt(row.amountIdrText ?? String(row.amountIdr))) });
             if (column.key === 'paymentMethod' && !row.paymentMethod) return h('td', { class: 'muted', title: 'Pembayaran kosong — tetap dihitung dalam total', text: '—' });
+            if (column.key === 'paymentMethod') return h('td', null, paymentLabel(h, row.paymentMethod, report.paymentIcons));
             if (column.key === 'description') return h('td', { class: 'col-desc' }, h('div', { class: 'desc', text: row.description || '' }));
             if (column.key === 'line') return h('td', { class: 'col-line', text: row.line });
             return h('td', { class: column.className, text: column.display ? column.display(row) : cellText(row, column) });
@@ -1169,13 +1173,14 @@ import { createWorkbookSettingsEditor } from './settings.js';
     return h('div', { class: 'view' },
       h('div', { class: 'view-head' }, h('div', null,
         h('h1', { text: 'Master' }),
-        h('p', { class: 'muted', text: 'Kategori, tipe dan metode pembayaran milik workbook. Target budget dapat diedit di sini.' }))),
+        h('p', { class: 'muted', text: `Kategori dan metode pembayaran untuk buku ${report.year}.` })),
+        h('div', { class: 'editor-actions' }, masterEditor.button('category'))),
       h('div', { class: 'two-col' },
         panel(`Kategori pengeluaran (${expense.length})`, categoryTable(expense), { aside: settings.button('budget') }),
         h('div', { class: 'side-stack' },
           panel(`Kategori lain (${other.length})`, other.length ? categoryTable(other) : h('p', { class: 'muted', text: 'Tidak ada.' })),
           panel('Tipe transaksi', h('div', { class: 'chips' }, report.transactionTypes.map(typePill))),
-          panel('Metode pembayaran', h('div', { class: 'chips' }, report.paymentMethods.map((m) => h('span', { class: 'chip chip--static', text: m })))))));
+          panel('Metode pembayaran', h('div', { class: 'chips' }, report.paymentMethods.map((m) => h('span', { class: 'chip chip--static' }, paymentLabel(h, m, report.paymentIcons)))), { aside: masterEditor.button('payment') }))));
   }
 
   // ---------- boot ----------

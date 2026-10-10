@@ -51,6 +51,16 @@
 .settings-source h3 { font-size: .95rem; }
 .settings-source-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .settings-message { overflow-wrap: anywhere; }
+.master-toolbar { display: flex; align-items: center; gap: 12px; }
+.master-toolbar .input { flex: 1; min-width: 0; }
+.master-toolbar .button { flex: none; }
+.master-list { display: grid; }
+.master-entry { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.master-entry-info { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.master-entry .editor-actions { flex: none; }
+.master-form-fields { display: grid; gap: 16px; }
+.payment-label { display: inline-flex; align-items: center; gap: 7px; }
+.payment-icon { flex: none; color: var(--muted); }
 .settings-dialog td, .settings-dialog th { white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .settings-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
@@ -60,6 +70,9 @@
   .settings-dialog .button, .settings-dialog .input { min-height: 44px; }
   .settings-dialog .input { font-size: 16px; }
   .settings-budget-row, .settings-source-fields { grid-template-columns: minmax(0, 1fr); }
+  .master-toolbar, .master-entry { flex-wrap: wrap; }
+  .master-toolbar .input { flex-basis: 100%; }
+  .master-entry .editor-actions { width: 100%; }
 }
 .transaction-editor { display: grid; gap: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .editor-heading, .editor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }

@@ -32,6 +32,7 @@
 - [Home and Back navigation smoke test](development/HOME_NAVIGATION_SMOKE.md)
 - [Monthly web transaction CRUD smoke test](development/WEB_TRANSACTION_CRUD_SMOKE.md)
 - [Workbook settings smoke test](development/WEB_WORKBOOK_SETTINGS_SMOKE.md)
+- [Master CRUD smoke test](development/WEB_MASTER_CRUD_SMOKE.md)
 - [Local extraction model candidates](reference/LOCAL_MODEL_CANDIDATES.md)
 - [Evidence-first Smart Scan decision](adr/0007-evidence-first-smart-scan.md)
 - [Known issues](development/KNOWN_ISSUES.md)
@@ -58,6 +59,7 @@
 - [ADR 0008 — read-only web viewer](adr/0008-read-only-web-viewer-and-browser-session.md) (proposed)
 - [ADR 0009 — browser monthly transaction mutations](adr/0009-browser-monthly-transaction-mutations.md)
 - [ADR 0010 — structured workbook settings](adr/0010-structured-workbook-settings.md)
+- [ADR 0011 — guarded Master and supplemental report](adr/0011-guarded-master-and-supplemental-report.md)
 
 ## Reference
 

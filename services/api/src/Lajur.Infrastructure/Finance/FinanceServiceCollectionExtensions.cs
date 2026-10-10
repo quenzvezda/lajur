@@ -31,6 +31,7 @@ public static class FinanceServiceCollectionExtensions
         });
         services.AddScoped<IFinanceService, WorkbookFinanceService>();
         services.AddScoped<IWorkbookSettingsService, WorkbookSettingsService>();
+        services.AddScoped<IWorkbookMasterService, WorkbookMasterService>();
         services.AddScoped<IWorkbookService, WorkbookManagementService>();
         services.AddScoped<IFinanceReportService, WorkbookFinanceReportService>();
         return services;

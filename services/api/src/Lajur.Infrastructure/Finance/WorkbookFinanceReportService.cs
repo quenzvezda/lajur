@@ -56,7 +56,7 @@ public sealed class WorkbookFinanceReportService(OpenXmlWorkbookStore workbookSt
                         source.PaidThresholdIdr))
                     .ToArray())
                 .ToArray());
-        return FinanceReportCalculator.Calculate(snapshot, today);
+        return FinanceReportCalculator.Calculate(snapshot, today) with { PaymentIcons = data.Master.PaymentIcons };
     }
 
     public async Task<IReadOnlyList<int>> ListYearsAsync(Guid userId, CancellationToken cancellationToken)

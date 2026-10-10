@@ -122,7 +122,10 @@ public sealed record YearReport(
     int FilledMonthCount,
     long AverageExpensePerFilledMonthIdr,
     IReadOnlyList<CategoryYearRow> ExpenseMatrix,
-    IReadOnlyList<PaymentAmount> ExpenseByPaymentMethod);
+    IReadOnlyList<PaymentAmount> ExpenseByPaymentMethod)
+{
+    public IReadOnlyDictionary<string, string> PaymentIcons { get; init; } = new Dictionary<string, string>();
+}
 
 public interface IFinanceReportService
 {

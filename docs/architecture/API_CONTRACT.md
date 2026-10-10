@@ -353,7 +353,7 @@ retrying; no silent overwrite or automatic conflict resolution is promised.
 
 Monthly UI restricts new drafts to the displayed month; editing can move an
 existing row to another month in the same year with confirmation. Financial
-responses are no-store. Category/payment Master CRUD remains a separate slice.
+responses are no-store. Guarded category/payment commands are documented below.
 
 ## 10. Browser structured workbook settings
 
@@ -382,3 +382,28 @@ payloads return 409 `settings_revision_conflict`; exact command retry returns
 current settings without another audit/write effect. Browser uncertainty is
 inspected by receipt before retrying the original command. Owner/year lock,
 pre-settings backup, validated temporary workbook and atomic promotion apply.
+
+## 11. Guarded browser Master commands
+
+- `GET /web/books/{year}/master`: `{ version, categories, payments,
+  categoryCapacity, paymentCapacity, canAddCategory, canAddPayment,
+  categoryReason, paymentReason }`. Each entry exposes name/kind/budgetIdr/icon,
+  transactionCount/historyCount/dependencyCount, canRename/canDelete and reason.
+- `PUT /web/books/{year}/master`: `{ operationId, expectedVersion, entity,
+  action, originalName, name, kind, budgetIdr, icon }`. Entity is category/payment;
+  action is create/update/delete. New entries have originalName=null; delete uses
+  originalName and no replacement fields. Category kinds are Pengeluaran/Pemasukan;
+  expense budget is nullable exact nonnegative IDR text. Payment icons are optional
+  cash/bank/wallet/qr/shopping/card/other; null chooses the name-based display default.
+- Successful command returns current management snapshot. Identical retry is
+  idempotent; receipt GET from section 10 has scope `MASTER`. Version/UUID conflict
+  returns 409; invalid/unsafe/capacity-dependent operations return 422 with detail.
+
+Same browser cookie/CSRF/tenant/no-store policies apply. Identity changes/deletes
+recheck ledger/history/native dependencies under lock. Used payment icons and
+category budgets remain editable while identities stay locked. Budget must be
+unset before category deletion. Known list bindings stay contiguous; no cascade
+or offline-command remapping occurs. A verified backup and complete managed
+native LajurMaster report accompany successful writes. Existing Android Master
+GET exposes current lists without changing its compatible DTO; browser reports
+add paymentIcons mapping. Stale Android commands fail validation for user review.

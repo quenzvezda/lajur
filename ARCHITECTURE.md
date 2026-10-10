@@ -81,6 +81,8 @@ Owns:
 - browser workbook UI and a separate cookie session with antiforgery-protected
   monthly transaction commands (ADR 0009);
 - structured budget and monthly projection input commands (ADR 0010);
+- guarded Master commands, presentation icons and supplemental native reporting
+  (ADR 0011);
 - import/export;
 - backup lifecycle.
 

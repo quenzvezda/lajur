@@ -118,6 +118,13 @@ Use WorkManager exponential backoff with sane limits.
 
 Do not infinitely retry permanent 4xx validation errors.
 
+Browser Master changes are scoped to the selected annual book. Refreshing Master
+updates Android's cached choices without changing pending transaction payloads.
+A stale removed/renamed value receives permanent validation failure and remains
+available for explicit correction; it is never automatically mapped to another
+category/payment, discarded or marked synchronized. The server guards Master
+identity changes against canonical/history dependencies (ADR 0011).
+
 ## 9. Pull/reconciliation
 
 On app start/resume or successful sync, refresh current-month canonical transactions as needed.

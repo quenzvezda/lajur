@@ -67,6 +67,12 @@ Structured budget/projection commands use `IWorkbookSettingsService`, mapped
 literal inputs, independent scope versions and audit operation receipts (ADR
 0010). Both use the owner/year lock and atomic XLSM promotion. Settings commands
 create pre-settings backups; exact replay does not rewrite the active book.
+`IWorkbookMasterService` adds guarded category/payment commands with the same
+atomic settings mechanism. Current and historical usage and native dependencies
+are rechecked inside the owner/year lock. Lists stay within recognized capacities;
+complete native reporting lives in managed `LajurMaster`, with icon metadata in
+`__MasterIcons`. Existing reports, transaction identities and Android intents are
+preserved (ADR 0011).
 
 ## 4. Per-workbook serialization
 

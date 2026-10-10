@@ -7,4 +7,7 @@ public sealed record WorkbookMasterData(
     IReadOnlyList<string> TransactionTypes,
     IReadOnlyList<string> PaymentMethods,
     IReadOnlyList<WorkbookCategory> Categories,
-    IReadOnlyDictionary<string, string> DefinedNames);
+    IReadOnlyDictionary<string, string> DefinedNames)
+{
+    public IReadOnlyDictionary<string, string> PaymentIcons { get; init; } = new Dictionary<string, string>();
+}

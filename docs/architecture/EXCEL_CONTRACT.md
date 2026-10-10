@@ -103,6 +103,22 @@ Visibility should be **very hidden** if supported safely by the workbook package
 
 Append-only application financial change history.
 
+### `__MasterIcons`
+
+Very-hidden presentation mapping introduced by guarded Master commands:
+`PaymentMethod`, `Icon`. Fixed local icon keys do not alter canonical payment
+names or financial formulas. GET/default display does not initialize this sheet.
+
+### `LajurMaster` (visible supplemental report)
+
+Guarded Master commands create/regenerate a managed annual category/payment
+matrix covering every current Master expense category and method, outside-Master
+expense totals and blank payment. Formulas reference the existing A:F tables;
+the original Rekap and monthly formula/chart/pivot layouts remain unchanged.
+Owned/shared formula shapes are validated before regeneration. Customized or
+colliding report sheets block mutation. Year generation preserves/regenerates
+this owned report for the target year when it exists in the approved template.
+
 System sheets must not be referenced by normal user formulas unless explicitly designed.
 
 ## 7. Master contract

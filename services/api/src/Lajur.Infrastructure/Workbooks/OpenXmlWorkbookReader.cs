@@ -265,7 +265,7 @@ public sealed partial class OpenXmlWorkbookReader
             transactionTypes,
             paymentMethods,
             categories,
-            definedNames);
+            definedNames) { PaymentIcons = WorkbookMasterMap.ReadIcons(workbookPart) };
     }
 
     public int DetectWorkbookYear(string workbookPath)

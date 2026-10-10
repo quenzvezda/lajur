@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Runtime.CompilerServices;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Lajur.Application.Finance;
@@ -10,6 +11,7 @@ namespace Lajur.Infrastructure.Workbooks;
 // Server-owned bindings. Neither cell addresses nor formulas are accepted from the browser.
 internal static class WorkbookSettingsMap
 {
+    private static readonly ConditionalWeakTable<WorkbookPart, string[]> SharedText = new();
     internal sealed record BudgetMap(BudgetSettings Snapshot, IReadOnlyDictionary<string, uint> Rows);
     internal sealed record ProjectionMap(ProjectionSettings Snapshot, string Sheet, IReadOnlyDictionary<string, uint> Rows);
     internal static readonly string[] MonthSheets = ["Jan", "Feb", "Mar", "April", "May", "June", "July", "Aug", "Sep", "Okt", "Nov", "Des"];
@@ -27,7 +29,7 @@ internal static class WorkbookSettingsMap
     internal static string Text(WorkbookPart workbook, Cell? cell)
     {
         if (cell?.DataType?.Value == CellValues.SharedString && int.TryParse(cell.CellValue?.Text, out var index))
-            return workbook.SharedStringTablePart!.SharedStringTable!.Elements<SharedStringItem>().ElementAt(index).InnerText.Trim();
+            return SharedText.GetValue(workbook, part => part.SharedStringTablePart!.SharedStringTable!.Elements<SharedStringItem>().Select(item => item.InnerText).ToArray())[index].Trim();
         return (cell?.InlineString?.InnerText ?? cell?.CellValue?.Text ?? "").Trim();
     }
     internal static bool Literal(WorkbookPart workbook, Cell? cell) => cell?.CellFormula is null
