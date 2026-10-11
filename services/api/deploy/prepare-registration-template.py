@@ -45,7 +45,7 @@ def prepare(source, target):
                 return opening+inner+closing
             # Preserve all original namespaces, markup-compatibility aliases and
             # formatting. Only replace values in selected numeric literal cells.
-            patched = re.sub(r'(<(?:\w+:)?c\b[^>]*\br="([^"]+)"[^>]*>)(.*?)(</(?:\w+:)?c>)', clear, xml, flags=re.DOTALL)
+            patched = re.sub(r'(<(?:\w+:)?c\b[^>]*\br="([^"]+)"[^>]*(?<!/)>)(.*?)(</(?:\w+:)?c>)', clear, xml, flags=re.DOTALL)
             if patched != xml:
                 patches[path] = patched.encode('utf-8')
         target.parent.mkdir(parents=True, exist_ok=True)

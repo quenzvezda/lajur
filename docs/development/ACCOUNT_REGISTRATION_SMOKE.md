@@ -36,7 +36,8 @@
 - `AccountBrowserTests`: real Razor forms, antiforgery, one-time code display,
   browser session invalidation, regeneration, invitations and password change.
 - `test_registration_template.py`: only selected literal defaults change;
-  unrelated package parts, shared strings and VBA remain byte-identical.
+  every selected numeric literal is zero, including a paired cell after a
+  self-closing empty cell; unrelated parts/shared strings/VBA remain byte-identical.
 - Android JVM test verifies password length and matching confirmation.
 - Opt-in `AccountFlowUiTest`: synthetic local backend only at emulator host
   `127.0.0.1:5088` via an emulator-only `adb reverse tcp:5088 tcp:5088`.
