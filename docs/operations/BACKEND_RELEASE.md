@@ -91,6 +91,19 @@ key authenticates but cannot execute arbitrary `id`, and that a real digest
 deploy retains owner login and service readiness. No deliberate broken image is
 deployed to production to test rollback.
 
+First production acceptance passed on 2026-10-11 in
+[CI run 38106909234](https://github.com/quenzvezda/lajur/actions/runs/38106909234):
+source `d1957ac68123c7bed49970230c12afbe4fc2a1d1`, run number `8`, image digest
+`sha256:b0e061a162d619c4fccf2eb596d5ed48ecc823ac02ebf10ab0e7aec183881835`.
+The host deployment record matches that revision/digest; the API is healthy and
+still bound only to loopback. Both external HTTPS health checks pass, owner
+browser login still succeeds with a secure session, Nginx validates, and the
+unrelated Oracle container remains healthy. The snapshot is mode `0600` and
+contains the persistent infrastructure/template directories. The dedicated
+SSH key still rejects arbitrary shell commands. This checks backup presence and
+archive structure, not an off-host restore exercise or physical-phone session
+retention after deployment.
+
 Sources: [GitHub runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
 [GHCR authentication](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry),
 [package permissions](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
