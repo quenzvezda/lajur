@@ -31,8 +31,10 @@ Suggested host:
 
 `lajur.solusi-program.site` (chosen for the first deployment on 2026-10-10)
 
-Actual domain remains deployment configuration.
-DNS/HTTPS and the VPS service are not configured yet.
+Actual domain remains deployment configuration. The first ARM64 production
+bootstrap uses the separate configuration under `services/api/deploy/` and
+loopback port `18080`; see [the VPS runbook](VPS_BOOTSTRAP.md) for deployment
+state, TLS, maintenance, and rollback.
 
 ## 3. Docker persistence
 
@@ -54,8 +56,9 @@ Container replacement must not remove data/session keys. Every mounted directory
 ## 3a. Reverse proxy and forwarded headers
 
 The API trusts `X-Forwarded-For`/`X-Forwarded-Proto` only from loopback and from the networks in
-`Lajur:ReverseProxy:TrustedNetworks` (compose: `LAJUR_TRUSTED_PROXY_NETWORK`, default
-`172.16.0.0/12`, the Docker bridge range the host Nginx reaches the loopback-bound port through).
+`Lajur:ReverseProxy:TrustedNetworks`. The development compose uses
+`LAJUR_TRUSTED_PROXY_NETWORK`; production uses `LAJUR_TRUSTED_PROXY_CIDR`, set to
+the dedicated Docker network gateway `/32` rather than a broad bridge range.
 This gives per-client login rate limits instead of one shared limit for everyone behind the proxy,
 and the `https` scheme the browser cookie (`__Host-`, `Secure`) requires.
 
@@ -63,9 +66,9 @@ Minimal host Nginx location (TLS/Certbot config stays as already managed on the 
 
 ```nginx
 location / {
-    proxy_pass http://127.0.0.1:8080;
+    proxy_pass http://127.0.0.1:18080;
     proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
     client_max_body_size 30m;   # workbook uploads
 }
@@ -73,6 +76,8 @@ location / {
 
 Browser login to the web viewer requires HTTPS; plain `http://localhost` works only on the
 machine itself.
+The production configuration assumes DNS-only access to Nginx. Enabling a
+Cloudflare proxy requires scoped, trusted real-IP handling first.
 
 ## 4. GitHub Actions
 
