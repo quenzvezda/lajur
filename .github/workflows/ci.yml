@@ -10,7 +10,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Do not interrupt a main deployment while it snapshots/replaces the API.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   backend:
@@ -32,6 +33,9 @@ jobs:
 
       - name: Test release publication guards
         run: python3 .github/scripts/test_publish_android_release.py
+
+      - name: Test production deployment guards
+        run: python3 services/api/deploy/test_deploy_gate.py
 
       - name: Build
         run: dotnet build services/api/Lajur.slnx --configuration Release --no-restore
@@ -84,6 +88,80 @@ jobs:
 
       - name: Container smoke test
         run: bash services/api/tests/container-smoke.sh lajur-api:ci tests/workbook-fixtures/LajurWorkbookFixture.xlsm
+
+  publish-backend:
+    name: Publish ARM64 backend
+    needs: [backend, container]
+    if: github.repository == 'quenzvezda/lajur' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - name: Check out trusted source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Build native ARM64 image
+        run: |
+          docker build --file services/api/Dockerfile \
+            --label "org.opencontainers.image.source=https://github.com/quenzvezda/lajur" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "ghcr.io/quenzvezda/lajur-api:sha-$GITHUB_SHA" .
+
+      - name: Verify ARM64 container behavior
+        run: bash services/api/tests/container-smoke.sh "ghcr.io/quenzvezda/lajur-api:sha-$GITHUB_SHA" tests/workbook-fixtures/LajurWorkbookFixture.xlsm
+
+      - name: Publish verified image
+        id: publish
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG="$RUNNER_TEMP/lajur-registry"
+          umask 077
+          mkdir -p "$DOCKER_CONFIG"
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username quenzvezda --password-stdin
+          unset REGISTRY_TOKEN
+          image="ghcr.io/quenzvezda/lajur-api:sha-$GITHUB_SHA"
+          docker push "$image"
+          reference="$(docker image inspect "$image" --format '{{index .RepoDigests 0}}')"
+          digest="${reference#ghcr.io/quenzvezda/lajur-api@}"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+
+  deploy-backend:
+    name: Deploy production backend
+    needs: publish-backend
+    if: github.repository == 'quenzvezda/lajur' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    environment: backend-production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: backend-production
+      cancel-in-progress: false
+    steps:
+      - name: Check out deployment client
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Deploy exact verified digest
+        env:
+          DEPLOY_HOST: ${{ vars.BACKEND_SSH_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.BACKEND_SSH_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.BACKEND_SSH_PRIVATE_KEY }}
+          DEPLOY_DIGEST: ${{ needs.publish-backend.outputs.digest }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: python3 services/api/deploy/ssh-deploy.py
 
   android-release:
     name: Signed Android APK

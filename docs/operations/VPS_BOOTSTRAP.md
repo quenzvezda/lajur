@@ -9,7 +9,8 @@ its contents are not read, copied, converted, or placed in GitHub secrets.
 
 The first image is built natively from verified source commit
 `6bf3824d67e048dc0f137179ebab0670aced0507`, with OCI revision/source labels.
-Registry publication and restricted CI deployment are separate follow-ups.
+Registry publication and restricted routine CI deployment are described in
+[backend release operations](BACKEND_RELEASE.md).
 
 ## Host configuration
 

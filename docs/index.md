@@ -42,6 +42,7 @@
 
 - [Deployment](operations/DEPLOYMENT.md)
 - [First VPS deployment and HTTPS](operations/VPS_BOOTSTRAP.md)
+- [Backend CI/CD and rollback](operations/BACKEND_RELEASE.md)
 - [Signed Android release builds](operations/ANDROID_RELEASE.md)
 - [Backup and recovery](operations/BACKUP_RECOVERY.md)
 

@@ -2,8 +2,8 @@ name: lajur-production
 
 services:
   api:
-    # First bootstrap builds this image natively on the ARM64 VPS from a fixed
-    # Git commit. Set an exact local image ID; registry distribution comes later.
+    # Bootstrap accepts a local image ID; CI deploys a verified GHCR digest.
+    # The root-owned gate pulls explicitly before Compose replaces the service.
     image: ${LAJUR_IMAGE:?Set the verified API image ID in production.env}
     pull_policy: never
     restart: unless-stopped
