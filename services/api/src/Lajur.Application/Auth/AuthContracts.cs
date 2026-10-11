@@ -32,7 +32,10 @@ public enum AuthFailure
     UsernameAlreadyExists,
     UserNotFound,
     InvalidUsername,
-    InvalidPassword
+    InvalidPassword,
+    RegistrationUnavailable,
+    InvalidInvitation,
+    InvitationLimit
 }
 
 public sealed record AuthResult<T>(T? Value, AuthFailure? Failure)

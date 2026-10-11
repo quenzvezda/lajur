@@ -270,6 +270,14 @@ p { margin: 0; }
   border-radius: 14px; box-shadow: var(--shadow);
 }
 .login-lead { color: var(--muted); }
+.account-page { width: min(640px, calc(100% - 32px)); margin: 32px auto; padding-bottom: 40px; }
+.account-page h2 { margin-top: 28px; }
+.account-codes { width: 100%; padding: 12px; margin: 12px 0; font: 13px/1.8 ui-monospace, monospace; color: var(--text); background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 6px; }
+.account-page .button { margin: 4px 4px 4px 0; }
+.validation-summary-valid { display: none; }
+.login-card .field + .field { margin-top: 12px; }
+.login-card .field + .button { margin-top: 16px; }
+.account-codes { font-size: clamp(10px, 2.9vw, 13px); box-sizing: border-box; }
 .login-note { color: var(--muted); font-size: .8rem; text-align: center; }
 .field { display: grid; gap: .35rem; font-weight: 550; }
 .field input {

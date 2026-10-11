@@ -1,0 +1,22 @@
+@page "/pulihkan"
+@model PulihkanModel
+@{ ViewData["Title"] = "Pulihkan akun"; ViewData["BodyClass"] = "page-login"; }
+<main class="login"><section class="login-card">
+  <h1>Pulihkan akun</h1>
+  @if (Model.Completed)
+  { <p>Password berhasil diganti. Masuk kembali dan buat kode pemulihan baru melalui menu Akun.</p><a class="button button--primary button--block" href="/masuk">Masuk</a> }
+  else
+  {
+    <p>Gunakan salah satu kode yang Anda simpan. Pemulihan mengakhiri sesi browser dan Android; data keuangan tetap tersimpan.</p>
+    <form method="post">
+      @if (Model.Error is not null) { <p class="alert alert--error" role="alert">@Model.Error</p> }
+      <div asp-validation-summary="All" class="field-error"></div>
+      <label class="field"><span>Username</span><input asp-for="Username" autocomplete="username" required></label>
+      <label class="field"><span>Kode pemulihan</span><input asp-for="Code" autocomplete="off" required maxlength="128"></label>
+      <label class="field"><span>Password baru · minimal 12 karakter</span><input asp-for="NewPassword" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+      <label class="field"><span>Ulangi password baru</span><input asp-for="ConfirmPassword" autocomplete="new-password" maxlength="256" required></label>
+      <button class="button button--primary button--block" type="submit">Ganti password</button>
+    </form>
+    <p class="login-note">Tidak punya kode? Hubungi pengelola server untuk pemulihan manual.</p><a href="/masuk">Kembali masuk</a>
+  }
+</section></main>

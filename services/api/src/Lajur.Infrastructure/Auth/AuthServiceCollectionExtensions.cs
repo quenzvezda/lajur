@@ -40,11 +40,17 @@ public static class AuthServiceCollectionExtensions
             options.UseSqlite(connectionString);
         });
         services.AddScoped<AuthDatabaseInitializer>();
+        services.AddOptions<RegistrationOptions>()
+            .Bind(configuration.GetSection(RegistrationOptions.SectionName))
+            .Validate(options => options.Mode is "closed" or "invite" or "open", "Invalid registration mode.")
+            .Validate(options => options.MaxAccounts is >= 1 and <= 10000, "Invalid account limit.")
+            .ValidateOnStart();
         services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
         services.AddScoped<SqliteAuthService>();
         services.AddScoped<IAuthService>(provider => provider.GetRequiredService<SqliteAuthService>());
         services.AddScoped<IAccountAdministration>(provider => provider.GetRequiredService<SqliteAuthService>());
         services.AddScoped<IBrowserAuthService>(provider => provider.GetRequiredService<SqliteAuthService>());
+        services.AddScoped<IAccountSelfService>(provider => provider.GetRequiredService<SqliteAuthService>());
         services.AddSingleton<IUserStoragePathResolver, UserStoragePathResolver>();
         services.AddSingleton(TimeProvider.System);
         return services;

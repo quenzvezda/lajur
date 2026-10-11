@@ -3,13 +3,16 @@ using Lajur.Application.Auth;
 using Lajur.Application.Workbooks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
+using Lajur.Infrastructure.Auth;
 
 namespace Lajur.Infrastructure.Workbooks;
 
 public sealed class WorkbookManagementService(
     OpenXmlWorkbookStore store,
     IOptions<StorageOptions> storageOptions,
-    ILogger<WorkbookManagementService> logger) : IWorkbookService
+    ILogger<WorkbookManagementService> logger,
+    AuthDbContext authDatabase) : IWorkbookService
 {
     private const string WorkbookContentType = "application/vnd.ms-excel.sheet.macroEnabled.12";
     private readonly string storageRoot = Path.GetFullPath(storageOptions.Value.RootPath);
@@ -31,7 +34,10 @@ public sealed class WorkbookManagementService(
         string correlationId,
         CancellationToken cancellationToken)
     {
-        var templatePath = Path.Combine(storageRoot, "templates", "finance-template.xlsm");
+        var registered = await authDatabase.SelfRegisteredAccounts.AnyAsync(account => account.UserId == userId, cancellationToken);
+        // No fallback to the operator's private Master/projection defaults.
+        var templatePath = Path.Combine(storageRoot, "templates",
+            registered ? "registration-template.xlsm" : "finance-template.xlsm");
         var result = await store.GenerateYearAsync(
             new WorkbookKey(userId, year),
             templatePath,

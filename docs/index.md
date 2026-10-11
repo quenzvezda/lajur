@@ -31,6 +31,7 @@
 - [Data/Workbook menu smoke test](development/WORKBOOK_MENU_SMOKE.md)
 - [Home and Back navigation smoke test](development/HOME_NAVIGATION_SMOKE.md)
 - [Android app-update smoke test](development/ANDROID_APP_UPDATE_SMOKE.md)
+- [Local registration and account recovery acceptance](development/ACCOUNT_REGISTRATION_SMOKE.md)
 - [Monthly web transaction CRUD smoke test](development/WEB_TRANSACTION_CRUD_SMOKE.md)
 - [Workbook settings smoke test](development/WEB_WORKBOOK_SETTINGS_SMOKE.md)
 - [Master CRUD smoke test](development/WEB_MASTER_CRUD_SMOKE.md)
@@ -43,6 +44,7 @@
 - [Deployment](operations/DEPLOYMENT.md)
 - [First VPS deployment and HTTPS](operations/VPS_BOOTSTRAP.md)
 - [Backend CI/CD and rollback](operations/BACKEND_RELEASE.md)
+- [Local account registration and recovery operations](operations/LOCAL_ACCOUNTS.md)
 - [Signed Android release builds](operations/ANDROID_RELEASE.md)
 - [Backup and recovery](operations/BACKUP_RECOVERY.md)
 
@@ -65,6 +67,7 @@
 - [ADR 0009 — browser monthly transaction mutations](adr/0009-browser-monthly-transaction-mutations.md)
 - [ADR 0010 — structured workbook settings](adr/0010-structured-workbook-settings.md)
 - [ADR 0011 — guarded Master and supplemental report](adr/0011-guarded-master-and-supplemental-report.md)
+- [ADR 0012 — local registration and recovery codes](adr/0012-local-registration-and-recovery-codes.md)
 
 ## Reference
 
@@ -77,4 +80,5 @@
 - [Research notes](reference/RESEARCH_NOTES.md)
 - [Web finance editing research and UX proposal](reference/WEB_FINANCE_EDITING_RESEARCH.md)
 - [Agent access to VPS and deployment research](reference/VPS_AGENT_DEPLOYMENT_RESEARCH.md)
+- [Registrasi, pemulihan akun, dan Google Sign-In](reference/ACCOUNT_REGISTRATION_RECOVERY_RESEARCH.md)
 - [OCR baseline](reference/OCR_BASELINE.md)

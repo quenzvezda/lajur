@@ -135,11 +135,22 @@ Do not bake secrets into the Docker image or repository.
 
 ## 12. Password recovery
 
-v1 need not implement email reset.
+Local registration/recovery is defined by ADR 0012. Registration defaults to
+single-use invitations; every active existing user may issue an invitation after
+password reauthentication. New accounts receive eight one-time recovery codes.
+Forgotten-password recovery requires username plus a saved code, never username
+alone. Recovery cancels the old code set and Android/browser sessions and requires
+normal login. Regenerating codes requires the current password.
 
-Operator-assisted CLI/admin reset is acceptable for a private/self-hosted deployment.
+Operator-assisted CLI reset remains the fallback when all recovery evidence is
+lost; verify ownership separately. It invalidates recovery codes and unused
+invitations. Email/Google login are not implemented in this slice. Changing a
+known password revokes sessions but retains saved recovery codes.
 
-Changing/resetting a password should revoke all refresh sessions.
+Auth schema upgrades are additive/versioned metadata only; account UUIDs and
+existing financial workbooks remain untouched. Anonymous and authenticated
+account commands have bounded input and rate limits, and sensitive responses are
+`no-store`. Browser commands use antiforgery.
 
 ## 13. Browser (web viewer) session
 

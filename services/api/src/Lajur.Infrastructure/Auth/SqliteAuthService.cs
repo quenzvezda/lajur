@@ -14,7 +14,8 @@ public sealed partial class SqliteAuthService(
     IPasswordHasher<UserAccount> passwordHasher,
     IAccessTokenIssuer accessTokenIssuer,
     IOptions<AuthOptions> options,
-    TimeProvider timeProvider) : IAuthService, IAccountAdministration
+    TimeProvider timeProvider,
+    IOptions<RegistrationOptions> registrationOptions) : IAuthService, IAccountAdministration, IAccountSelfService
 {
     private readonly AuthOptions _options = options.Value;
 
@@ -90,6 +91,8 @@ public sealed partial class SqliteAuthService(
 
         user.PasswordHash = passwordHasher.HashPassword(user, password);
         await RevokeUserSessionsAsync(user.Id, timeProvider.GetUtcNow(), cancellationToken);
+        await dbContext.RecoveryCodes.Where(code => code.UserId == user.Id).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.Invitations.Where(code => code.CreatedBy == user.Id && code.UsedAtUnix == null).ExecuteDeleteAsync(cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return AuthResult<Guid>.Success(user.Id);
     }

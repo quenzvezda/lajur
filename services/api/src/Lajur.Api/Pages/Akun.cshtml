@@ -1,0 +1,26 @@
+@page "/akun"
+@model AkunModel
+@{ ViewData["Title"] = "Keamanan akun"; }
+<main class="account-page">
+  <a href="/buku">‹ Kembali ke buku</a><h1>Keamanan akun</h1><p>@User.Identity?.Name</p>
+  @if (Model.Error is not null) { <p class="alert alert--error" role="alert">@Model.Error</p> }
+  <div asp-validation-summary="All" class="field-error"></div>
+  @if (Model.Codes is not null) { <partial name="_RecoveryCodes" model="Model.Codes" /> }
+  @if (Model.Invitation is not null)
+  {
+    <h2>Undangan siap dibagikan</h2><p>Berlaku sampai @Model.Invitation.ExpiresAtUtc.ToString("dd MMM yyyy HH:mm") UTC · satu akun.</p>
+    <input class="account-codes" value="@Model.Invitation.Code" readonly aria-label="Kode undangan" autocomplete="off">
+  }
+  <form method="post">
+    <h2>Password &amp; pemulihan</h2>
+    <label class="field"><span>Password saat ini</span><input asp-for="Password" autocomplete="current-password" required maxlength="256"></label>
+    <p>Kode baru membatalkan semua kode pemulihan lama. Simpan set baru di tempat aman.</p>
+    <button name="action" value="codes" class="button">Buat kode pemulihan baru</button>
+    @if (Model.InvitesEnabled) { <button name="action" value="invite" class="button">Buat undangan</button><p class="login-note">Sekali pakai, berlaku 7 hari. Maksimal 5 undangan aktif.</p> }
+    <h2>Ubah password</h2>
+    <label class="field"><span>Password baru · minimal 12 karakter</span><input asp-for="NewPassword" autocomplete="new-password" maxlength="256"></label>
+    <label class="field"><span>Ulangi password baru</span><input asp-for="ConfirmPassword" autocomplete="new-password" maxlength="256"></label>
+    <p class="login-note">Anda akan keluar dari seluruh sesi browser dan Android. Data dan antrean lokal tidak dihapus.</p>
+    <button name="action" value="password" class="button button--primary">Ganti password</button>
+  </form>
+</main>

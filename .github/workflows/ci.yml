@@ -37,6 +37,9 @@ jobs:
       - name: Test production deployment guards
         run: python3 services/api/deploy/test_deploy_gate.py
 
+      - name: Test neutral registration template preparation
+        run: python3 services/api/deploy/test_registration_template.py
+
       - name: Build
         run: dotnet build services/api/Lajur.slnx --configuration Release --no-restore
 

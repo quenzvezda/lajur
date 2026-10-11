@@ -8,9 +8,26 @@ public sealed class AuthDbContext(DbContextOptions<AuthDbContext> options) : DbC
     public DbSet<UserAccount> Users => Set<UserAccount>();
     public DbSet<RegisteredDevice> Devices => Set<RegisteredDevice>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
+    public DbSet<AccountRecoveryCode> RecoveryCodes => Set<AccountRecoveryCode>();
+    public DbSet<AccountInvitation> Invitations => Set<AccountInvitation>();
+    public DbSet<SelfRegisteredAccount> SelfRegisteredAccounts => Set<SelfRegisteredAccount>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var registrations = modelBuilder.Entity<SelfRegisteredAccount>();
+        registrations.ToTable("SelfRegisteredAccounts");
+        registrations.HasKey(account => account.UserId);
+        registrations.HasOne<UserAccount>().WithOne().HasForeignKey<SelfRegisteredAccount>(account => account.UserId).OnDelete(DeleteBehavior.Cascade);
+        var recovery = modelBuilder.Entity<AccountRecoveryCode>();
+        recovery.ToTable("RecoveryCodes");
+        recovery.HasKey(code => code.Hash);
+        recovery.HasIndex(code => code.UserId);
+        recovery.HasOne<UserAccount>().WithMany().HasForeignKey(code => code.UserId).OnDelete(DeleteBehavior.Cascade);
+        var invitations = modelBuilder.Entity<AccountInvitation>();
+        invitations.ToTable("AccountInvitations");
+        invitations.HasKey(code => code.Hash);
+        invitations.HasIndex(code => code.CreatedBy);
+        invitations.HasOne<UserAccount>().WithMany().HasForeignKey(code => code.CreatedBy).OnDelete(DeleteBehavior.Cascade);
         var users = modelBuilder.Entity<UserAccount>();
         users.ToTable("Users");
         users.HasKey(user => user.Id);

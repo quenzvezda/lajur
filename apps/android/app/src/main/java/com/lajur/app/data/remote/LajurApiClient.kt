@@ -49,6 +49,23 @@ class LajurApiClient(
     suspend fun login(request: LoginRequest): AuthTokensDto =
         post("auth/login", json.encodeToString(request), null)
 
+    suspend fun register(request: RegistrationRequest): RegistrationReceipt =
+        post("auth/register", json.encodeToString(request), null)
+
+    suspend fun recover(request: RecoveryRequest) {
+        execute(Request.Builder().url(url("auth/recover")).post(json.encodeToString(request).toRequestBody(mediaType)).build())
+    }
+
+    suspend fun changePassword(request: ChangePasswordRequest, token: String) {
+        execute(Request.Builder().url(url("auth/password")).post(json.encodeToString(request).toRequestBody(mediaType)).bearer(token).build())
+    }
+
+    suspend fun recoveryCodes(password: String, token: String): RecoveryCodesDto =
+        post("auth/recovery-codes", json.encodeToString(PasswordConfirmation(password)), token)
+
+    suspend fun invitation(password: String, token: String): InvitationReceipt =
+        post("auth/invitations", json.encodeToString(PasswordConfirmation(password)), token)
+
     suspend fun refresh(refreshToken: String): AuthTokensDto =
         post("auth/refresh", json.encodeToString(RefreshRequest(refreshToken)), null)
 

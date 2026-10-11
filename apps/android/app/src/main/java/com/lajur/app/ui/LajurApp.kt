@@ -80,9 +80,12 @@ fun LajurApp(
     val lockStatus by viewModel.appLockStatus.collectAsStateWithLifecycle()
     val lockSettings by viewModel.appLockSettings.collectAsStateWithLifecycle()
     var workbookSetup by remember { mutableStateOf(false) }
+    var accountMode by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(session) { if (session is SessionState.SignedOut && accountMode == "security") accountMode = null }
     when (val state = session) {
         SessionState.Restoring -> LoadingScreen()
-        SessionState.SignedOut -> LoginScreen(
+        SessionState.SignedOut -> if (accountMode != null) AccountRoute(viewModel, false, accountMode!!) { accountMode = null }
+        else LoginScreen(
             defaultServerUrl = viewModel.defaultServerUrl,
             busy = busy,
             errorMessage = message,
@@ -91,6 +94,8 @@ fun LajurApp(
                 viewModel.login(server, username, password)
             },
             updateContent = { AppUpdateRoute(viewModel) },
+            onRegister = { viewModel.clearAccountResult(); accountMode = "register" },
+            onRecover = { viewModel.clearAccountResult(); accountMode = "recover" },
         )
         is SessionState.SignedIn -> when (lockStatus) {
             AppLockStatus.RESTORING -> LoadingScreen()
@@ -100,11 +105,14 @@ fun LajurApp(
                 onUnlocked = viewModel::onUnlockSucceeded,
                 onSignOut = viewModel::signOut,
             )
-            AppLockStatus.UNLOCKED -> if (state.needsWorkbookOnboarding) {
+            AppLockStatus.UNLOCKED -> if (accountMode != null) AccountRoute(viewModel, true, "security") { accountMode = null }
+            else if (state.needsWorkbookOnboarding) {
                 if (workbookSetup) WorkbookRoute(viewModel) { workbookSetup = false }
-                else OnboardingScreen(busy, { viewModel.createWorkbook() }, { workbookSetup = true }, viewModel::signOut)
+                else OnboardingScreen(busy, { viewModel.createWorkbook() }, { workbookSetup = true }, viewModel::signOut,
+                    onAccount = { viewModel.clearAccountResult(); accountMode = "security" })
             } else {
-                SignedInApp(viewModel, state, authenticate, pickImage, takePhoto, onExit)
+                SignedInApp(viewModel, state, authenticate, pickImage, takePhoto, onExit,
+                    onAccount = { viewModel.clearAccountResult(); accountMode = "security" })
             }
         }
     }
@@ -118,6 +126,7 @@ private fun SignedInApp(
     pickImage: () -> Unit,
     takePhoto: () -> Unit,
     onExit: () -> Unit,
+    onAccount: () -> Unit,
 ) {
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val summary by viewModel.summary.collectAsStateWithLifecycle()
@@ -218,6 +227,7 @@ private fun SignedInApp(
             onSignOut = viewModel::signOut,
             bottomBar = { MainNavigationBar(MainTab.SETTINGS, pendingSharedImage != null) { screen = AppScreen.Main(it) } },
             updateContent = { AppUpdateRoute(viewModel, showAutoPreference = true) },
+            onAccount = onAccount,
         )
         AppScreen.Workbooks -> WorkbookRoute(viewModel, goBack)
         AppScreen.SmartScan -> SmartScanScreen(
@@ -294,10 +304,12 @@ private fun LoginScreen(
     errorMessage: String?,
     onLogin: (String, String, String) -> Unit,
     updateContent: @Composable () -> Unit,
+    onRegister: () -> Unit,
+    onRecover: () -> Unit,
 ) {
     var server by rememberSaveable { mutableStateOf(defaultServerUrl) }
     var username by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -328,12 +340,16 @@ private fun LoginScreen(
             if (busy) CircularProgressIndicator(Modifier.height(20.dp)) else Text("Login")
         }
         Spacer(Modifier.height(24.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = onRegister, enabled = !busy) { Text("Buat akun") }
+            TextButton(onClick = onRecover, enabled = !busy) { Text("Lupa password?") }
+        }
         updateContent()
     }
 }
 
 @Composable
-private fun OnboardingScreen(busy: Boolean, onCreate: () -> Unit, onImport: () -> Unit, onSignOut: () -> Unit) {
+private fun OnboardingScreen(busy: Boolean, onCreate: () -> Unit, onImport: () -> Unit, onSignOut: () -> Unit, onAccount: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -345,6 +361,7 @@ private fun OnboardingScreen(busy: Boolean, onCreate: () -> Unit, onImport: () -
             Text(if (busy) "Membuat…" else "Buat workbook ${YearMonth.now().year}")
         }
         OutlinedButton(onClick = onImport, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Impor workbook yang sudah ada") }
+        TextButton(onClick = onAccount, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Keamanan akun") }
         TextButton(onClick = onSignOut, modifier = Modifier.align(Alignment.End)) { Text("Keluar") }
     }
 }
@@ -552,6 +569,7 @@ private fun SettingsScreen(
     onSignOut: () -> Unit,
     bottomBar: @Composable () -> Unit,
     updateContent: @Composable () -> Unit,
+    onAccount: () -> Unit,
 ) {
     var enableError by remember { mutableStateOf<String?>(null) }
     val timeoutChoices = listOf(
@@ -581,6 +599,7 @@ private fun SettingsScreen(
                 Text("Impor, ekspor, buat workbook tahunan, dan status perubahan lokal.")
             }
             item { Text("Keamanan", style = MaterialTheme.typography.headlineSmall) }
+            item { OutlinedButton(onClick = onAccount, modifier = Modifier.fillMaxWidth()) { Text("Password, kode pemulihan & undangan") } }
             item {
                 Row(
                     Modifier.fillMaxWidth(),

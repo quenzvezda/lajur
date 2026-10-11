@@ -1,0 +1,30 @@
+@page "/daftar"
+@model DaftarModel
+@{ ViewData["Title"] = "Daftar"; ViewData["BodyClass"] = "page-login"; }
+<main class="login">
+  <section class="login-card">
+    <a class="brand brand--large" href="/masuk"><img class="brand-mark" src="~/brand/lajur-icon.svg" alt="" width="32" height="32">Lajur</a>
+    @if (Model.Codes is not null)
+    {
+      <h1>Akun berhasil dibuat</h1>
+      <partial name="_RecoveryCodes" model="Model.Codes" />
+      <a class="button button--primary button--block" href="/masuk">Sudah disimpan, lanjut masuk</a>
+    }
+    else if (Model.Mode == "closed")
+    { <h1>Pendaftaran belum dibuka</h1><a href="/masuk">Kembali masuk</a> }
+    else
+    {
+      <h1>Buat akun</h1><p class="login-lead">Buku keuangan pribadi, terpisah untuk setiap akun.</p>
+      <form method="post">
+        @if (Model.Error is not null) { <p class="alert alert--error" role="alert">@Model.Error</p> }
+        <div asp-validation-summary="All" class="field-error"></div>
+        <label class="field"><span>Username</span><input asp-for="Username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+        <label class="field"><span>Password · minimal 12 karakter</span><input asp-for="Password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+        <label class="field"><span>Ulangi password</span><input asp-for="ConfirmPassword" autocomplete="new-password" required maxlength="256"></label>
+        @if (Model.Mode == "invite") { <label class="field"><span>Kode undangan</span><input asp-for="InvitationCode" autocomplete="off" required maxlength="128"></label> }
+        <button class="button button--primary button--block" type="submit">Daftar</button>
+      </form>
+      <p class="login-note">Sudah punya akun? <a href="/masuk">Masuk</a></p>
+    }
+  </section>
+</main>

@@ -37,6 +37,7 @@
         }
         <span id="last-updated" class="muted small"></span>
         <span class="user" title="Akun">@Model.Username</span>
+        <a href="/akun" class="button button--ghost">Akun</a>
         <form method="post" action="/keluar" class="inline-form">
             @Html.AntiForgeryToken()
             <button type="submit" class="button button--ghost">Keluar</button>

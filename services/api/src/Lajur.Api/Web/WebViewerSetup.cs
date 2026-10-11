@@ -73,10 +73,18 @@ public static class WebViewerSetup
         {
             options.Conventions.AuthorizeFolder("/", Policy);
             options.Conventions.AllowAnonymousToPage("/Masuk");
+            options.Conventions.AllowAnonymousToPage("/Daftar");
+            options.Conventions.AllowAnonymousToPage("/Pulihkan");
         });
 
         services.AddRateLimiter(options =>
         {
+            options.AddPolicy("account", context =>
+                HttpMethods.IsPost(context.Request.Method)
+                    ? RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(10),
+                            QueueLimit = 0, AutoReplenishment = true })
+                    : RateLimitPartition.GetNoLimiter("account-get"));
             // Only credential submissions count; rendering the login form is free.
             options.AddPolicy(LoginRateLimitPolicy, context =>
                 HttpMethods.IsPost(context.Request.Method)

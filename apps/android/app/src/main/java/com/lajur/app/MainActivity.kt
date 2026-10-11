@@ -21,7 +21,6 @@ import com.lajur.app.ui.LajurApp
 import com.lajur.app.ui.LajurViewModel
 import com.lajur.app.ui.theme.LajurTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
@@ -66,8 +65,9 @@ class MainActivity : FragmentActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.CREATED) {
-                viewModel.appLockSettings
-                    .map { it.screenProtectionEnabled }
+                kotlinx.coroutines.flow.combine(viewModel.appLockSettings, viewModel.accountScreenVisible) { settings, accountVisible ->
+                    settings.screenProtectionEnabled || accountVisible
+                }
                     .distinctUntilChanged()
                     .collect(::applyScreenProtection)
             }

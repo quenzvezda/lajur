@@ -47,6 +47,9 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     val appLockStatus: StateFlow<AppLockStatus> = mutableAppLockStatus.asStateFlow()
     private val mutableAppLockSettings = MutableStateFlow(AppLockSettings())
     val appLockSettings: StateFlow<AppLockSettings> = mutableAppLockSettings.asStateFlow()
+    private val mutableAccountScreenVisible = MutableStateFlow(false)
+    val accountScreenVisible = mutableAccountScreenVisible.asStateFlow()
+    fun setAccountScreenVisible(visible: Boolean) { mutableAccountScreenVisible.value = visible }
     private val mutablePendingSharedImage = MutableStateFlow<String?>(null)
     val pendingSharedImage: StateFlow<String?> = mutablePendingSharedImage.asStateFlow()
     private val mutableSmartScanState = MutableStateFlow<SmartScanState>(SmartScanState.Idle)
@@ -175,6 +178,60 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val defaultServerUrl: String = BuildConfig.LAJUR_API_BASE_URL
+    private val mutableAccount = MutableStateFlow(AccountUiState())
+    val account = mutableAccount.asStateFlow()
+
+    fun clearAccountResult() { if (!mutableAccount.value.busy) mutableAccount.value = AccountUiState() }
+
+    fun registerAccount(server: String, username: String, password: String, invitation: String) = accountAction {
+        val api = accountApi(server)
+        val result = api.register(com.lajur.app.data.remote.RegistrationRequest(username.trim(), password, invitation.trim()))
+        mutableAccount.value = AccountUiState(codes = result.codes, message = "Akun ${result.username} dibuat. Simpan kode sebelum masuk.")
+    }
+
+    fun recoverAccount(server: String, username: String, code: String, password: String) = accountAction {
+        accountApi(server).recover(com.lajur.app.data.remote.RecoveryRequest(username.trim(), code.trim(), password))
+        mutableAccount.value = AccountUiState(message = "Password diganti. Masuk kembali, lalu buat kode pemulihan baru.")
+    }
+
+    fun createRecoveryCodes(password: String) = accountAction {
+        val result = container.sessionRepository.authorized { api, token -> api.recoveryCodes(password, token) }
+        mutableAccount.value = AccountUiState(codes = result.codes, message = "Kode lama dibatalkan. Simpan kode baru.")
+    }
+
+    fun createInvitation(password: String) = accountAction {
+        val result = container.sessionRepository.authorized { api, token -> api.invitation(password, token) }
+        mutableAccount.value = AccountUiState(invitation = result.code, message = "Undangan sekali pakai, berlaku 7 hari.")
+    }
+
+    fun changeAccountPassword(password: String, newPassword: String) = accountAction {
+        container.sessionRepository.authorized { api, token ->
+            api.changePassword(com.lajur.app.data.remote.ChangePasswordRequest(password, newPassword), token)
+        }
+        container.sessionRepository.signOutLocally()
+        mutableMessage.value = "Password diganti. Masuk kembali dengan password baru."
+        mutableAccount.value = AccountUiState()
+    }
+
+    private fun accountApi(server: String): com.lajur.app.data.remote.LajurApiClient {
+        val root = server.trim().trimEnd('/')
+        require(root.startsWith("https://") || (BuildConfig.DEBUG && root.startsWith("http://"))) { "Gunakan alamat HTTPS." }
+        val normalized = if (root.endsWith("/api/v1")) "$root/" else "$root/api/v1/"
+        return com.lajur.app.data.remote.LajurApiClient(normalized, kotlinx.serialization.json.Json { ignoreUnknownKeys = true })
+    }
+
+    private fun accountAction(action: suspend () -> Unit) {
+        if (mutableAccount.value.busy) return
+        mutableAccount.value = AccountUiState(busy = true)
+        viewModelScope.launch {
+            try { action() }
+            catch (error: CancellationException) { throw error }
+            catch (error: Exception) {
+                mutableAccount.value = AccountUiState(error = (error.message ?: "Permintaan gagal.") +
+                    " Jika koneksi putus setelah mengirim, periksa akun sebelum mencoba lagi. Kode dapat dibuat ulang setelah login.")
+            } finally { mutableAccount.value = mutableAccount.value.copy(busy = false) }
+        }
+    }
 
     init {
         viewModelScope.launch {

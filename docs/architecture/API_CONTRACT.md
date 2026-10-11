@@ -1,5 +1,25 @@
 # API contract
 
+## Local registration and recovery (ADR 0012)
+
+All account responses are `no-store`; request bodies are limited to 4 KiB.
+Account mutation attempts share a per-IP rate limit of 10 per 10 minutes.
+
+| Method/path under `/api/v1/auth` | Authorization | Body/result |
+| --- | --- | --- |
+| GET `registration` | Anonymous | `{mode: invite/closed/open}` |
+| POST `register` | Anonymous | `username`, `password`, `invitationCode`; returns `username`, eight `codes` once |
+| POST `recover` | Anonymous | `username`, `code`, `newPassword`; 204 then normal login; generic 400 on failure |
+| POST `password` | Android bearer | current `password`, `newPassword`; 204; all sessions ended |
+| POST `recovery-codes` | Android bearer | current `password`; returns replacement `codes` once |
+| POST `invitations` | Android bearer | current `password`; returns `code`, `expiresAtUtc` once |
+
+Browser forms `/daftar`, `/pulihkan`, `/akun` call the same domain service with
+Razor antiforgery and the independent browser cookie. API account commands do
+not accept the web cookie as a bearer credential. Passwords remain 12–256 chars;
+client confirmation is checked by web/Android. Recovery cancels the old code
+set, sessions and outstanding invitations; no workbook content is changed.
+
 This is a behavioral contract, not a generated OpenAPI file. The implementation should generate an OpenAPI document from ASP.NET Core.
 
 Base prefix:

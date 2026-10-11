@@ -2,9 +2,10 @@
 
 ## 1. Preconditions
 
-The account exists on the server. v1 does not require public self-registration, email verification, or “forgot password” flows.
-
-An operator/admin can create accounts using a CLI/admin procedure implemented by the backend project.
+Accounts can be created by an operator or by local registration (ADR 0012).
+Default registration requires a single-use invitation from an existing user.
+After registration, save the eight recovery codes, then log in normally.
+Email verification/SMTP and Google login are not part of this slice.
 
 ## 2. First login
 
@@ -27,7 +28,9 @@ Server:
 
 1. selects the approved workbook template/schema version;
 2. generates the requested/current year workbook;
-3. patches year-dependent text/formulas;
+3. patches year-dependent text/formulas; self-registered accounts require the
+   separate neutral `registration-template.xlsm`, never the operator's private
+   defaults;
 4. initializes hidden application metadata sheets;
 5. validates the resulting package;
 6. atomically promotes it to the active workbook.

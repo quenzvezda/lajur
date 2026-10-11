@@ -1,0 +1,9 @@
+@model IReadOnlyList<string>
+<h2>Simpan kode pemulihan</h2>
+<p>Kode ini hanya ditampilkan sekarang. Simpan di password manager atau tempat aman di luar HP ini. Siapa pun yang memiliki kode dapat mengganti password Anda.</p>
+<textarea class="account-codes" data-recovery-codes rows="8" readonly aria-label="Kode pemulihan" spellcheck="false">@string.Join("\n", Model)</textarea>
+<button type="button" class="button" data-copy-recovery>Salin kode</button>
+<button type="button" class="button" data-download-recovery>Unduh kode</button>
+<span data-code-feedback role="status" class="small"></span>
+<script src="~/js/account-codes.js" asp-append-version="true" defer></script>
+<p class="login-note">Pakai satu kode saat lupa password. Setelah pemulihan, semua kode lama dibatalkan. Buat set baru setelah masuk.</p>

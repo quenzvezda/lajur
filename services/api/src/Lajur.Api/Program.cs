@@ -134,7 +134,7 @@ builder.Services.AddRateLimiter(options =>
         {
             context.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
             await context.HttpContext.Response.WriteAsync(
-                "Terlalu banyak percobaan masuk. Tunggu satu menit lalu coba lagi.",
+                "Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi.",
                 cancellationToken);
             return;
         }
