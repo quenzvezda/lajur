@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""Operator backup: atomic XLSM copies, online SQLite snapshot, versioned rclone copy."""
+import hashlib
+from contextlib import closing
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import sqlite3
+import subprocess
+import tarfile
+import tempfile
+from datetime import datetime, timezone
+
+STORAGE = Path('/srv/lajur')
+DESTINATION = 'gdrive:lajur-backup'
+CONFIG = '/home/ubuntu/.config/rclone/rclone.conf'
+NAME = re.compile(r'lajur-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}\.tar\.gz')
+
+
+def copy_regular(source, destination):
+    """An open fd pins the old or new complete file across API atomic replacement."""
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if source.is_symlink():
+        raise ValueError('Symlinks are not supported')
+    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)
+    with os.fdopen(os.open(source, flags), 'rb') as incoming:
+        with destination.open('xb') as outgoing:
+            shutil.copyfileobj(incoming, outgoing)
+    destination.chmod(0o600)
+
+
+def make_snapshot(storage, output):
+    from verify_lajur_backup import verify_workbook
+    for name in ('data', 'backups', 'templates', 'keys'):
+        root = storage / name
+        if not root.is_dir() or root.is_symlink():
+            raise ValueError('Required storage directory missing or unsafe')
+        for source in sorted(root.rglob('*')):
+            if source.is_symlink():
+                raise ValueError('Symlinks are not supported')
+            if not source.is_file():
+                continue
+            if name in ('data', 'backups', 'templates') and source.suffix != '.xlsm':
+                continue
+            target = output / source.relative_to(storage)
+            copy_regular(source, target)
+            if target.suffix == '.xlsm':
+                verify_workbook(target)
+    # Online SQLite backup includes WAL without stopping the API or copying a live DB.
+    target = output / 'auth/lajur-auth.db'
+    target.parent.mkdir(mode=0o700, exist_ok=True)
+    with closing(sqlite3.connect((storage / 'auth/lajur-auth.db').as_uri() + '?mode=ro', uri=True)) as source:
+        with closing(sqlite3.connect(target)) as destination:
+            source.backup(destination)
+            if destination.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+                raise ValueError('Invalid auth snapshot')
+    target.chmod(0o600)
+    manifest = {'format': 1, 'createdAt': datetime.now(timezone.utc).isoformat(), 'files': {}}
+    for path in sorted(output.rglob('*')):
+        if path.is_file():
+            manifest['files'][path.relative_to(output).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    return sum(name.startswith('data/') and name.endswith('.xlsm') for name in manifest['files'])
+
+
+def rclone(*args):
+    result = subprocess.run(['rclone', '--config', CONFIG, *args], capture_output=True, text=True, timeout=900)
+    if result.returncode:
+        raise RuntimeError('Remote backup operation failed; credentials and remote output suppressed')
+    return result.stdout
+
+
+def main():
+    import fcntl  # Linux-only scheduler lock; snapshot logic remains portable for tests.
+    os.umask(0o077)
+    root = STORAGE / 'offsite-backups'
+    root.mkdir(mode=0o700, exist_ok=True)
+    with (root / 'backup.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print('SKIP backup already running')
+            return
+        stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        archive = root / f'lajur-{stamp}-{os.urandom(4).hex()}.tar.gz'
+        with tempfile.TemporaryDirectory(prefix='snapshot-', dir=root) as temporary:
+            snapshot = Path(temporary)
+            count = make_snapshot(STORAGE, snapshot)
+            with tarfile.open(archive, 'w:gz') as package:
+                for path in sorted(snapshot.rglob('*')):
+                    if path.is_file():
+                        package.add(path, arcname=path.relative_to(snapshot).as_posix(), recursive=False)
+        from verify_lajur_backup import verify_archive
+        verify_archive(archive)
+        remote = f'{DESTINATION}/{archive.name}'
+        rclone('copyto', str(archive), remote, '--immutable')
+        # Verify bytes after downloading from Drive, not just presence/size.
+        with tempfile.TemporaryDirectory(prefix='verify-', dir=root) as temporary:
+            downloaded = Path(temporary) / archive.name
+            rclone('copyto', remote, str(downloaded))
+            if hashlib.sha256(downloaded.read_bytes()).digest() != hashlib.sha256(archive.read_bytes()).digest():
+                raise ValueError('Remote archive digest differs')
+            verify_archive(downloaded)
+        # Scope retention to exact names generated by this operator, after verified upload.
+        remote_names = sorted(name for name in rclone('lsf', DESTINATION, '--files-only').splitlines() if NAME.fullmatch(name))
+        for name in remote_names[:-30]:
+            rclone('deletefile', f'{DESTINATION}/{name}')
+        local_names = sorted(path for path in root.iterdir() if NAME.fullmatch(path.name) and path.is_file() and not path.is_symlink())
+        for path in local_names[:-7]:
+            path.unlink()
+        (root / 'last-success.json').write_text(json.dumps({'archive': archive.name, 'workbooks': count,
+            'completedAt': datetime.now(timezone.utc).isoformat(), 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()}) + '\n')
+        print(f'PASS backup uploaded and downloaded; active_workbooks={count}; archive={archive.name}')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as error:
+        print(f'FAIL backup: {type(error).__name__}; inspect configuration privately')
+        raise SystemExit(1)

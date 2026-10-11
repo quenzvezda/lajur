@@ -1,0 +1,4 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# VPS UTC: 21:00 = 04:00 WIB next day.
+0 21 * * * root umask 077; /usr/bin/python3 /usr/local/lib/lajur-backup/backup-lajur.py >> /srv/lajur/offsite-backups/backup.log 2>&1
