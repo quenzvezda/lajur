@@ -44,11 +44,11 @@ Use a dummy account/workbook, not the owner's historical ledger:
 
 1. Offline, create a valid date/type/category/positive-IDR transaction without
    choosing payment. Save succeeds; Home displays **Pembayaran belum diisi** and
-   **Perlu dilengkapi**. Missing date/type/category/amount still prevents save.
+   a compact **Perlu dilengkapi** toolbar icon/count. Missing date/type/category/amount still prevents save.
 2. Restart/unlock and reconnect. The same transaction syncs once; it is not
    marked Failed merely because payment is empty.
 3. Search for another transaction. The reminder's count must remain unchanged.
-   Tap **Lihat transaksi**: search clears and only incomplete rows appear.
+   Tap the review icon: search/other filters clear and only incomplete rows appear.
 4. Edit that row and choose a Master payment. After sync, the reminder disappears
    if no other incomplete row remains. Transaction count and amount totals stay
    unchanged. **Kosongkan pembayaran** clears it again without a new transaction.

@@ -18,6 +18,34 @@ public sealed class FinanceEndpointsTests
     private static string FixturePath => Path.Combine(AppContext.BaseDirectory, "Fixtures", "LajurWorkbookFixture.xlsm");
 
     [Fact]
+    public async Task Bearer_report_reads_only_own_workbook_and_preserves_package()
+    {
+        using var factory = new LajurApiFactory();
+        var owner = await CreateAccountAsync(factory, "report-owner", Password);
+        await CreateAccountAsync(factory, "report-empty", Password);
+        var path = SeedWorkbook(factory, owner, 2026);
+        var before = SHA256.HashData(await File.ReadAllBytesAsync(path));
+        using var anonymous = factory.CreateClient();
+        using var denied = await anonymous.GetAsync("/api/v1/reports?year=2026");
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+        using var empty = await CreateAuthenticatedClientAsync(factory, "report-empty", Password);
+        using var missing = await empty.GetAsync("/api/v1/reports?year=2026");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        using var client = await CreateAuthenticatedClientAsync(factory, "report-owner", Password);
+        using var response = await client.GetAsync("/api/v1/reports?year=2026");
+        response.EnsureSuccessStatusCode();
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        var report = await response.Content.ReadFromJsonAsync<Lajur.Application.Reports.YearReport>();
+        Assert.NotNull(report);
+        Assert.Equal(12, report.Months.Count);
+        var summary = await client.GetFromJsonAsync<FinanceSummary>("/api/v1/summary?year=2026&month=1");
+        Assert.Equal(summary!.ExpenseIdr, report.Months[0].ExpenseIdr);
+        Assert.Equal(before, SHA256.HashData(await File.ReadAllBytesAsync(path)));
+        using var invalid = await client.GetAsync("/api/v1/reports?year=0");
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
     public async Task Master_summary_and_transaction_query_read_the_authenticated_users_workbook()
     {
         using var factory = new LajurApiFactory();

@@ -133,7 +133,9 @@ private fun SignedInApp(
     val master by viewModel.master.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
+    val historyFilters by viewModel.historyFilters.collectAsStateWithLifecycle()
     val syncCounts by viewModel.syncCounts.collectAsStateWithLifecycle()
+    val insight by viewModel.insight.collectAsStateWithLifecycle()
     val appUpdate by viewModel.appUpdates.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val lockSettings by viewModel.appLockSettings.collectAsStateWithLifecycle()
@@ -143,8 +145,13 @@ private fun SignedInApp(
     val scanReportSaving by viewModel.scanReportSaving.collectAsStateWithLifecycle()
     val scanDiagnosticStatus by viewModel.scanDiagnosticStatus.collectAsStateWithLifecycle()
     var screen: AppScreen by remember { mutableStateOf(AppScreen.Main()) }
+    var insightCategory by remember { mutableStateOf<String?>(null) }
+    var insightTransactionId by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    LaunchedEffect(screen, month, syncCounts) {
+        if (screen == AppScreen.Main(MainTab.INSIGHTS)) viewModel.loadInsight()
+    }
     val goBack = rememberAppBackAction(screen,
         onNavigate = { target ->
             if (screen == AppScreen.SmartScan) viewModel.discardScan()
@@ -173,7 +180,24 @@ private fun SignedInApp(
     }
 
     when (val current = screen) {
-        is AppScreen.Main -> if (current.tab != MainTab.SETTINGS) HomeScreen(
+        is AppScreen.Main -> if (current.tab == MainTab.INSIGHTS) InsightScreen(
+            month = month, state = insight.forOwner(session.session.serverUrl + "|" + session.session.userId), counts = syncCounts,
+            onPrevious = viewModel::previousMonth, onNext = viewModel::nextMonth,
+            onPeriod = viewModel::selectMonth,
+            onRefresh = viewModel::loadInsight,
+            onHistory = {
+                viewModel.setHistoryFilters(HistoryFilters())
+                insightCategory = it; insightTransactionId = null; viewModel.setQuery("")
+                screen = AppScreen.Main(MainTab.HISTORY)
+            },
+            onRow = { row ->
+                viewModel.setHistoryFilters(HistoryFilters())
+                insightCategory = null; insightTransactionId = row.transactionId
+                viewModel.setQuery(if (row.transactionId == null) row.description ?: row.category else "")
+                screen = AppScreen.Main(MainTab.HISTORY)
+            },
+            bottomBar = { MainNavigationBar(MainTab.INSIGHTS, pendingSharedImage != null) { screen = AppScreen.Main(it) } },
+        ) else if (current.tab != MainTab.SETTINGS) HomeScreen(
             month = month,
             transactions = transactions,
             incomeIdr = summary.incomeIdr,
@@ -184,9 +208,9 @@ private fun SignedInApp(
             hasWorkbook = month.year in session.workbookYears,
             hasPendingSharedImage = pendingSharedImage != null,
             snackbar = snackbar,
-            onQueryChange = viewModel::setQuery,
-            onPreviousMonth = viewModel::previousMonth,
-            onNextMonth = viewModel::nextMonth,
+            onQueryChange = { insightCategory = null; insightTransactionId = null; viewModel.setQuery(it) },
+            onPreviousMonth = { insightCategory = null; insightTransactionId = null; viewModel.previousMonth() },
+            onNextMonth = { insightCategory = null; insightTransactionId = null; viewModel.nextMonth() },
             onRefresh = viewModel::refresh,
             onRetry = viewModel::retrySync,
             onCreateWorkbook = { viewModel.createWorkbook(month.year) },
@@ -198,6 +222,11 @@ private fun SignedInApp(
             onDiscardSharedImage = viewModel::discardSharedImage,
             tab = current.tab,
             onTab = { screen = AppScreen.Main(it) },
+            insightCategory = insightCategory,
+            insightTransactionId = insightTransactionId,
+            onClearInsightFilter = { insightCategory = null; insightTransactionId = null },
+            historyFilters = historyFilters,
+            onHistoryFilters = viewModel::setHistoryFilters,
         ) else SettingsScreen(
             settings = lockSettings,
             onBack = goBack,
@@ -228,6 +257,7 @@ private fun SignedInApp(
             bottomBar = { MainNavigationBar(MainTab.SETTINGS, pendingSharedImage != null) { screen = AppScreen.Main(it) } },
             updateContent = { AppUpdateRoute(viewModel, showAutoPreference = true) },
             onAccount = onAccount,
+            initialTab = if (appUpdate.release != null) 3 else 0,
         )
         AppScreen.Workbooks -> WorkbookRoute(viewModel, goBack)
         AppScreen.SmartScan -> SmartScanScreen(
@@ -393,13 +423,22 @@ internal fun HomeScreen(
     onDiscardSharedImage: () -> Unit,
     tab: MainTab = MainTab.HOME,
     onTab: (MainTab) -> Unit,
+    insightCategory: String? = null,
+    insightTransactionId: String? = null,
+    onClearInsightFilter: () -> Unit = {},
+    historyFilters: HistoryFilters = HistoryFilters(),
+    onHistoryFilters: (HistoryFilters) -> Unit = {},
 ) {
-    var incompleteOnly by rememberSaveable(month.toString()) { mutableStateOf(false) }
+    val incompleteOnly = historyFilters.incompleteOnly
+    var showFilters by remember { mutableStateOf(false) }
     val listState = remember(tab, month) { LazyListState() }
     val incompleteCount = transactions.count { !it.isDeleted && missingTransactionFields(it.draft).isNotEmpty() }
     val visibleTransactions = if (tab == MainTab.HOME) transactions.filterNot { it.isDeleted }
         .sortedWith(compareByDescending<LocalTransaction> { it.draft.date }.thenBy { it.transactionId }).take(3)
-        else filterTransactionReview(transactions, query, incompleteOnly)
+        else filterHistory(transactions, query, historyFilters).filter {
+            (insightCategory == null || it.draft.category == insightCategory) &&
+                (insightTransactionId == null || it.transactionId == insightTransactionId)
+        }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -408,14 +447,29 @@ internal fun HomeScreen(
                     MainTab.SCAN -> "Smart Scan"
                     else -> tab.label
                 }) },
+                actions = {
+                    if ((tab == MainTab.HOME || tab == MainTab.HISTORY) && incompleteCount > 0) {
+                        androidx.compose.material3.IconButton(onClick = {
+                            onClearInsightFilter(); onQueryChange("")
+                            onHistoryFilters(HistoryFilters(incompleteOnly = true))
+                            onTab(MainTab.HISTORY)
+                        }, modifier = Modifier.testTag("transaction-review-toggle")) {
+                            androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$incompleteCount") } }) {
+                                androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(com.lajur.app.R.drawable.ic_action_review),
+                                    contentDescription = "Perlu dilengkapi: $incompleteCount transaksi")
+                            }
+                        }
+                    }
+                },
             )
         },
         bottomBar = { MainNavigationBar(tab, hasPendingSharedImage, onTab) },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            if (hasWorkbook && (tab == MainTab.HOME || tab == MainTab.HISTORY))
+            if (hasWorkbook && tab == MainTab.HISTORY)
                 FloatingActionButton(onClick = onAdd, modifier = Modifier.testTag("add-transaction")) {
-                    Text("+ Tambah", Modifier.padding(horizontal = 12.dp))
+                    androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(com.lajur.app.R.drawable.ic_action_add),
+                        contentDescription = "Tambah transaksi")
                 }
         },
     ) { padding ->
@@ -446,6 +500,9 @@ internal fun HomeScreen(
                         Text("${transactions.count { !it.isDeleted }} transaksi", style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            }
+            if (tab == MainTab.HOME && hasWorkbook) item {
+                Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().testTag("add-transaction")) { Text("+ Tambah transaksi") }
             }
             if (!hasWorkbook && (tab == MainTab.HOME || tab == MainTab.HISTORY)) {
                 item {
@@ -484,16 +541,6 @@ internal fun HomeScreen(
                     }
                 }
             }
-            if (tab == MainTab.INSIGHTS) item {
-                Card(Modifier.fillMaxWidth().testTag("insights-placeholder")) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Insight · segera hadir", style = MaterialTheme.typography.titleLarge)
-                        Text("TODO: ringkasan dan analitik tambahan. Belum tersedia pada versi ini.")
-                        Text("Untuk saat ini, lihat ringkasan bulanan di Beranda atau analitik pada workbook Excel.")
-                        OutlinedButton(onClick = { onTab(MainTab.HOME) }) { Text("Lihat ringkasan bulan") }
-                    }
-                }
-            }
             if (tab == MainTab.HOME || tab == MainTab.HISTORY) item {
                 val syncText = when {
                     syncCounts.failed > 0 -> "Error ${syncCounts.failed} — ketuk untuk coba lagi"
@@ -506,23 +553,11 @@ internal fun HomeScreen(
                     TextButton(onClick = onRefresh) { Text("Refresh") }
                 }
             }
-            if ((tab == MainTab.HOME || tab == MainTab.HISTORY) && (incompleteCount > 0 || incompleteOnly)) item {
-                Card(Modifier.fillMaxWidth().testTag("transaction-review-reminder")) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Perlu dilengkapi", style = MaterialTheme.typography.titleMedium)
-                        Text("$incompleteCount transaksi pada data bulan ini yang sudah dimuat. " +
-                            "Pembayaran boleh diisi nanti; transaksi tetap dihitung dalam ringkasan.")
-                        TextButton(onClick = {
-                            incompleteOnly = !incompleteOnly
-                            onQueryChange("")
-                            if (tab == MainTab.HOME) onTab(MainTab.HISTORY)
-                        }, modifier = Modifier.testTag("transaction-review-toggle")) {
-                            Text(if (incompleteOnly) "Lihat semua transaksi" else "Lihat transaksi")
-                        }
-                    }
-                }
-            }
             if (tab == MainTab.HISTORY) item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${visibleTransactions.size} transaksi", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { showFilters = true }) { Text("Filter & urutkan${historyFilters.activeCount.takeIf { it > 0 }?.let { " ($it)" } ?: ""}") }
+                }
                 OutlinedTextField(
                     query,
                     onQueryChange,
@@ -530,18 +565,31 @@ internal fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
+                if (historyFilters.activeCount > 0 || historyFilters.order != HistoryOrder.NEWEST) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (incompleteOnly) "Perlu dilengkapi · ${historyFilters.order.label}" else "${historyFilters.activeCount} filter · ${historyFilters.order.label}",
+                            Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { onHistoryFilters(HistoryFilters()) }) { Text("Reset filter") }
+                    }
+                }
+            }
+            if (tab == MainTab.HISTORY && (insightCategory != null || insightTransactionId != null)) item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(insightCategory?.let { "Kategori: $it" } ?: "Transaksi dari Insight", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = onClearInsightFilter) { Text("Hapus filter") }
+                }
             }
             if (tab == MainTab.HOME) item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Transaksi terbaru", style = MaterialTheme.typography.titleMedium)
-                    TextButton(onClick = { incompleteOnly = false; onQueryChange(""); onTab(MainTab.HISTORY) }) {
+                    TextButton(onClick = { onHistoryFilters(HistoryFilters()); onClearInsightFilter(); onQueryChange(""); onTab(MainTab.HISTORY) }) {
                         Text("Lihat semua")
                     }
                 }
             }
             if (tab == MainTab.HOME || tab == MainTab.HISTORY) if (visibleTransactions.isEmpty()) {
                 item { Text(if (tab == MainTab.HISTORY && incompleteOnly) "Tidak ada transaksi yang perlu dilengkapi pada hasil ini."
-                    else if (tab == MainTab.HISTORY && query.isNotBlank()) "Transaksi tidak ditemukan."
+                    else if (tab == MainTab.HISTORY && (query.isNotBlank() || historyFilters.activeCount > 0 || insightCategory != null || insightTransactionId != null)) "Tidak ada transaksi yang cocok dengan filter."
                     else "Belum ada transaksi untuk bulan ini.", Modifier.padding(vertical = 24.dp)) }
             } else {
                 items(visibleTransactions, key = { it.transactionId }) { transaction ->
@@ -551,6 +599,9 @@ internal fun HomeScreen(
             item { Spacer(Modifier.height(80.dp)) }
         }
     }
+    if (showFilters) HistoryFilterSheet(historyFilters, transactions.filterNot { it.isDeleted }, onClose = { showFilters = false }, onApply = {
+        onClearInsightFilter(); onHistoryFilters(it); showFilters = false
+    })
 }
 
 
@@ -570,8 +621,11 @@ private fun SettingsScreen(
     bottomBar: @Composable () -> Unit,
     updateContent: @Composable () -> Unit,
     onAccount: () -> Unit,
+    initialTab: Int = 0,
 ) {
     var enableError by remember { mutableStateOf<String?>(null) }
+    var settingsTab by rememberSaveable { mutableIntStateOf(initialTab) }
+    val settingsList = remember(settingsTab) { LazyListState() }
     val timeoutChoices = listOf(
         0L to "Segera",
         60_000L to "1 menit",
@@ -588,18 +642,28 @@ private fun SettingsScreen(
             )
         },
     ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+        androidx.compose.material3.PrimaryScrollableTabRow(selectedTabIndex = settingsTab, edgePadding = 16.dp) {
+            listOf("Akun", "Keamanan", "Data", "Aplikasi").forEachIndexed { index, label ->
+                androidx.compose.material3.Tab(selected = settingsTab == index, onClick = { settingsTab = index }, text = { Text(label) })
+            }
+        }
         LazyColumn(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            Modifier.fillMaxSize().padding(16.dp), state = settingsList,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { updateContent() }
-            item {
+            if (settingsTab == 3) item { updateContent() }
+            if (settingsTab == 2) item {
                 Text("Data", style = MaterialTheme.typography.headlineSmall)
                 OutlinedButton(onClick = onData, modifier = Modifier.fillMaxWidth()) { Text("Data / Workbook") }
                 Text("Impor, ekspor, buat workbook tahunan, dan status perubahan lokal.")
             }
-            item { Text("Keamanan", style = MaterialTheme.typography.headlineSmall) }
-            item { OutlinedButton(onClick = onAccount, modifier = Modifier.fillMaxWidth()) { Text("Password, kode pemulihan & undangan") } }
+            if (settingsTab == 0) {
+                item { Text("Akun Anda", style = MaterialTheme.typography.titleLarge) }
+                item { OutlinedButton(onClick = onAccount, modifier = Modifier.fillMaxWidth()) { Text("Password, kode pemulihan & undangan") } }
+                item { OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) { Text("Keluar akun") } }
+            }
+            if (settingsTab == 1) {
             item {
                 Row(
                     Modifier.fillMaxWidth(),
@@ -682,7 +746,8 @@ private fun SettingsScreen(
             item {
                 Text("Perubahan perlindungan layar berlaku langsung.")
             }
-            item { OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) { Text("Keluar akun") } }
+            }
+        }
         }
     }
 }

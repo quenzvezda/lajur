@@ -10,6 +10,11 @@ Three categories:
 
 ## 1. User-facing defaults
 
+Current Android layout uses Akun/Keamanan/Data/Aplikasi horizontal tabs. This is a
+presentation split of existing account, app-lock, workbook and updater actions;
+it does not introduce new preference defaults or remove any action. Roadmap-only
+sync/scan/appearance preferences below are not fabricated as nonfunctional tabs.
+
 ### Security
 
 | Setting | Default |
@@ -66,6 +71,13 @@ Automatic checks use public GitHub Releases independently of the configured
 backend. Disabling checks is persisted in DataStore. A failed automatic check
 does not interrupt entry. Debug builds support manual discovery but cannot
 install an official release over their different signing key.
+
+Installed version code/name are read from Android Package Manager at startup and
+each foreground/check, independently of the network-check interval. When a known
+release's code is already installed, its ready/download/error state and persisted
+ready APK are discarded, and the UI marks that known update satisfied. The current
+version label does not come from a cached release manifest. This reconciliation
+runs even for offline/debug/automatic-check-disabled sessions.
 
 ### Data
 

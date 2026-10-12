@@ -5,8 +5,8 @@ This document defines information architecture and behavior, not final visual st
 ## 1. Navigation
 
 Primary signed-in destinations use a fixed bottom bar: **Beranda**, **Riwayat**,
-**Scan** (prominent center action), **Insight**, and **Setelan**. Insight is an
-explicit TODO/coming-soon placeholder, not an implemented budgeting feature.
+**Scan** (prominent center action), **Insight**, and **Setelan**. Insight contains
+native Ringkasan, Kategori and Tren tabs for the selected workbook month/year.
 
 Required destinations:
 
@@ -111,16 +111,48 @@ transaction count, sync/review reminders, and up to three non-deleted recent-dat
 transactions. **Lihat semua** opens History, where full-month search and review
 filtering live. History search must not filter Home totals or preview.
 Income cards use green, expense cards red in light and dark themes; explicit
-type labels remain so meaning is not conveyed by color alone. Manual **+ Tambah**
-is available on Home and History. The workbook remains the rich reporting surface.
+type labels remain so meaning is not conveyed by color alone. Manual **Tambah
+transaksi** appears inline below Home's summary; History uses a compact plus-icon
+FAB above the bottom navigation. Insight has no add FAB.
+
+### Insight
+
+The month selector stays above three tabs. Ringkasan shows monthly net, income,
+expense, saving rate, count, recognized workbook balance inputs, daily/cumulative
+spending and spending pace. Chart tap opens a dismissible date detail dialog.
+Kategori compares expense amounts with horizontal bars, labels Master budget
+usage (over-budget values also use red), groups payments for the selected month,
+and lists five largest expenses. Tapping a category opens History with an exact
+category filter; top expense taps use the transaction UUID when available. Both
+filters can be cleared and do not change the Home summary.
+Tren shows annual totals, monthly expense comparisons with income/net values,
+and recognized income-source/cash projections for the selected month. Projections
+are estimates, never new transactions; unrecognized/null values remain absent.
+
+Reports use the same workbook-derived calculator as web, with private cached
+annual snapshots scoped by server URL/account UUID/year. The last fetched time is
+shown; failed refresh preserves an offline snapshot. Pending/failed Android
+transactions are not overlaid into the canonical report and are explicitly counted.
+No report is fabricated for an uncached offline year. Tab/month changes reset list
+scroll; bottom navigation remains visible. Workbook remains the source of truth.
 
 When cached non-deleted rows in the selected month have empty payment (or another
-missing/invalid required field), show **Perlu dilengkapi** with a transaction
-count and **Lihat transaksi**. This count is independent of text search, not an
-account-wide/server completeness claim. The action clears search and filters
-the History list; **Lihat semua transaksi** removes the review filter. No blocking modal,
-unpaid status, or change to financial totals. Filling payment later is an edit
-to the original row. A blank method reads **Pembayaran belum diisi** on the list.
+missing/invalid required field), show a compact review icon with a numeric badge
+in the Home/History toolbar. The icon has a descriptive accessibility label and
+opens History restricted to incomplete rows, clearing unrelated filters/search.
+There is no large reminder card. This count is independent of text search, not an
+account-wide/server completeness claim. **Reset filter** restores the full list.
+Payment remains optional; totals are unchanged. Filling it later edits the original
+row. A blank method reads **Pembayaran belum diisi** on the list.
+
+History supports combined type/category/payment (including blank), inclusive date
+and integer nominal bounds, sync status and incomplete-only filters. A scrollable
+bottom sheet uses a sticky Apply/Reset footer, digit grouping/right alignment for
+nominal input, calendar date selection and labelled sorting by date or amount.
+Applied filters and order live in the ViewModel while navigating to detail/edit;
+month/account changes clear them. Draft edits are discarded when the sheet closes
+without Apply. Home and Insight totals are not filtered. Insight drilldown clears
+unrelated History filters before choosing an exact category or transaction UUID.
 
 ## 4a. Data / Workbook
 
@@ -287,6 +319,13 @@ If synchronized:
 No full recycle bin in v1.
 
 ## 10. Settings
+
+Settings has horizontally scrollable **Akun**, **Keamanan**, **Data**, **Aplikasi**
+tabs. Account/password/recovery/invitation and signout actions belong to Akun;
+app lock and screen privacy belong to Keamanan; workbook actions belong to Data;
+installed version/update actions belong to Aplikasi. Tab changes reset list scroll.
+Only implemented settings are exposed; the following groups remain the broader
+settings roadmap.
 
 Groups:
 

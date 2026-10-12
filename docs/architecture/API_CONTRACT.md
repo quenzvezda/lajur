@@ -1,5 +1,17 @@
 # API contract
 
+## Android workbook reports
+
+`GET /api/v1/reports?year=2026` requires Android bearer authentication and returns
+the same `YearReport` workbook-derived schema used by the web report. It contains
+12 monthly reports, category budgets/amounts, canonical A:F rows, balance inputs,
+spending pace, cash/income-source projections and annual totals. Monetary fields
+are integer IDR. Today uses the configured report time zone (default Asia/Jakarta).
+Only the authenticated account's workbook is read; query year is 1900–9999.
+Missing workbook returns 404, invalid year 400, unauthenticated requests 401.
+Responses are no-store; Android explicitly manages its private offline snapshot.
+Read-only reports do not mutate XLSM or trust stale cached Excel formula values.
+
 ## Local registration and recovery (ADR 0012)
 
 All account responses are `no-store`; request bodies are limited to 4 KiB.

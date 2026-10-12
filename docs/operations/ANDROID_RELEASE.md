@@ -107,9 +107,10 @@ Environment variables (public GitHub Variables) hold:
 | `ANDROID_API_BASE_URL` | `https://lajur.solusi-program.site/api/v1/` |
 | `ANDROID_SIGNING_CERT_SHA256` | Expected public signing-certificate SHA-256 |
 
-The proposed hostname is not yet deployed. The existing login screen lets the
-operator change the server address; release builds allow HTTPS only. DNS,
-Cloudflare and VPS bootstrap are a later stage.
+The hostname is deployed with HTTPS. The existing login screen lets the
+operator change the server address; release builds allow HTTPS only. Backend
+production deployment is managed by the same main CI pipeline; see
+[backend release operations](BACKEND_RELEASE.md).
 
 ## Local key custody and backup
 

@@ -63,7 +63,7 @@ internal fun AppUpdateRoute(viewModel: LajurViewModel, showAutoPreference: Boole
 
 @Composable
 internal fun AppUpdateSection(state: AppUpdateState, showAutoPreference: Boolean = false,
-    canInstall: Boolean = true, versionName: String = BuildConfig.VERSION_NAME,
+    canInstall: Boolean = true, versionName: String = state.installedVersionName,
     onCheck: () -> Unit, onDownload: () -> Unit, onCancel: () -> Unit,
     onAutoCheck: (Boolean) -> Unit, onNotes: () -> Unit, onInstall: () -> Unit) {
     Column(Modifier.fillMaxWidth().testTag("app-update-section"), verticalArrangement = Arrangement.spacedBy(6.dp)) {

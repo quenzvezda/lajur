@@ -61,6 +61,14 @@ Stores:
 - outbox operations;
 - cached Master data metadata if useful.
 
+Insight uses disposable app-private JSON snapshots keyed by SHA-256 of server
+URL plus immutable account UUID and workbook year; it does not change Room or
+outbox schemas. Snapshot writes use temp-file rename. Each includes a UTC fetch
+time and the canonical annual API report; there is no optimistic ledger overlay.
+The UI clears report state/cancels requests on account changes and signs out,
+and cached files for another identity cannot be selected. Uninstall removes these
+files; Android application backup remains disabled. This cache is not a backup.
+
 ### DataStore
 
 Stores normal preferences:

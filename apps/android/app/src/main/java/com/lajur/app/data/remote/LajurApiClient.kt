@@ -71,6 +71,8 @@ class LajurApiClient(
 
     suspend fun me(accessToken: String): MeDto = get("me", accessToken)
 
+    suspend fun report(year: Int, accessToken: String): YearReportDto = get("reports?year=$year", accessToken)
+
     suspend fun logout(accessToken: String) {
         val request = Request.Builder()
             .url(url("auth/logout"))

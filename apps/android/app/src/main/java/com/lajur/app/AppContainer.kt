@@ -64,5 +64,6 @@ class AppContainer(context: Context) {
     )
     val financeRepository = FinanceRepository(database, sessionRepository, scheduler, json, operationGate = financeOperationGate)
     val workbookRepository = WorkbookRepository(database, sessionRepository, financeOperationGate, WorkbookDocumentStore(context))
+    val insightRepository = com.lajur.app.data.InsightRepository(File(applicationContext.filesDir, "insights"), json)
     val syncProcessor = SyncProcessor(financeRepository, sessionRepository)
 }

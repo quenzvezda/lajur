@@ -30,6 +30,8 @@
 - [Smart Scan and editor UX smoke test](development/SMART_SCAN_UX_SMOKE.md)
 - [Data/Workbook menu smoke test](development/WORKBOOK_MENU_SMOKE.md)
 - [Home and Back navigation smoke test](development/HOME_NAVIGATION_SMOKE.md)
+- [Native Android Insight smoke test](development/ANDROID_INSIGHT_SMOKE.md)
+- [Android reminders, Settings and History filters](development/ANDROID_UI_POLISH_SMOKE.md)
 - [Android app-update smoke test](development/ANDROID_APP_UPDATE_SMOKE.md)
 - [Local registration and account recovery acceptance](development/ACCOUNT_REGISTRATION_SMOKE.md)
 - [Monthly web transaction CRUD smoke test](development/WEB_TRANSACTION_CRUD_SMOKE.md)

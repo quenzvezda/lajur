@@ -65,8 +65,39 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     private var smartScanJob: Job? = null
     private val mutableMonth = MutableStateFlow(YearMonth.now())
     val month: StateFlow<YearMonth> = mutableMonth.asStateFlow()
+    private val mutableInsight = MutableStateFlow(InsightState())
+    val insight = mutableInsight.asStateFlow()
+    private var insightJob: Job? = null
+
+    fun loadInsight() {
+        val signedIn = session.value as? SessionState.SignedIn ?: return
+        val owner = signedIn.session.serverUrl + "|" + signedIn.session.userId
+        val year = mutableMonth.value.year
+        insightJob?.cancel()
+        mutableInsight.value = InsightState(ownerKey = owner, loading = true)
+        insightJob = viewModelScope.launch {
+            val cached = container.insightRepository.read(owner, year)
+            mutableInsight.value = InsightState(ownerKey = owner, cached = cached, loading = true, offline = true)
+            try {
+                val report = container.sessionRepository.authorized { api, token -> api.report(year, token) }
+                currentCoroutineContext().ensureActive()
+                val current = session.value as? SessionState.SignedIn
+                if (current?.session?.userId != signedIn.session.userId || current.session.serverUrl != signedIn.session.serverUrl) return@launch
+                val saved = container.insightRepository.save(owner, report)
+                mutableInsight.value = InsightState(ownerKey = owner, cached = saved)
+            } catch (error: CancellationException) { throw error }
+            catch (_: Exception) {
+                mutableInsight.value = InsightState(ownerKey = owner, cached = cached, offline = true,
+                    error = if (cached == null) "Laporan belum tersedia. Hubungkan ke server lalu coba lagi."
+                        else "Pembaruan gagal. Menampilkan laporan terakhir.")
+            }
+        }
+    }
     private val mutableQuery = MutableStateFlow("")
     val query: StateFlow<String> = mutableQuery.asStateFlow()
+    private val mutableHistoryFilters = MutableStateFlow(HistoryFilters())
+    val historyFilters = mutableHistoryFilters.asStateFlow()
+    fun setHistoryFilters(value: HistoryFilters) { mutableHistoryFilters.value = value }
     private val mutableBusy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = mutableBusy.asStateFlow()
     private val mutableMessage = MutableStateFlow<String?>(null)
@@ -248,7 +279,15 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch { container.sessionRepository.restore() }
         viewModelScope.launch {
             session.collect { state ->
+                if (state !is SessionState.SignedIn) {
+                    mutableHistoryFilters.value = HistoryFilters()
+                    insightJob?.cancel()
+                    mutableInsight.value = InsightState()
+                }
                 if (state is SessionState.SignedIn && workbookOwner != state.session.userId) {
+                    mutableHistoryFilters.value = HistoryFilters()
+                    insightJob?.cancel()
+                    mutableInsight.value = InsightState()
                     mutableWorkbookMenu.value.selected?.file?.delete()
                     mutableWorkbookMenu.value = WorkbookMenuState()
                     workbookOwner = state.session.userId
@@ -289,11 +328,20 @@ class LajurViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun previousMonth() {
+        mutableHistoryFilters.value = HistoryFilters()
         mutableMonth.value = mutableMonth.value.minusMonths(1)
         refresh()
     }
 
+    fun selectMonth(value: YearMonth) {
+        if (value.year !in 1900..9999) return
+        mutableMonth.value = value
+        mutableHistoryFilters.value = HistoryFilters()
+        refresh()
+    }
+
     fun nextMonth() {
+        mutableHistoryFilters.value = HistoryFilters()
         mutableMonth.value = mutableMonth.value.plusMonths(1)
         refresh()
     }

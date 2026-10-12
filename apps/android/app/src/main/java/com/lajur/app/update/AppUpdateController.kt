@@ -26,6 +26,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 data class AppUpdateState(
+    val installedVersionCode: Long = BuildConfig.VERSION_CODE.toLong(),
+    val installedVersionName: String = BuildConfig.VERSION_NAME,
     val checking: Boolean = false,
     val checked: Boolean = false,
     val release: AppUpdateManifest? = null,
@@ -36,6 +38,13 @@ data class AppUpdateState(
     val autoCheck: Boolean = true,
 )
 
+internal fun AppUpdateState.reconcileInstalled(code: Long, name: String): AppUpdateState {
+    val alreadyInstalled = release?.versionCode?.let { it <= code } == true
+    return if (alreadyInstalled) copy(installedVersionCode = code, installedVersionName = name,
+        release = null, ready = false, progress = null, incompatibility = null, error = null, checked = true)
+    else copy(installedVersionCode = code, installedVersionName = name)
+}
+
 class AppUpdateController(context: Context, private val json: Json) {
     private val context = context.applicationContext
     private val preferences = AppUpdatePreferences(this.context)
@@ -43,7 +52,7 @@ class AppUpdateController(context: Context, private val json: Json) {
     private val source = GitHubUpdateSource(json)
     private val directory = File(this.context.cacheDir, "updates")
     private val apk = File(directory, "release.apk")
-    private val mutableState = MutableStateFlow(AppUpdateState(checking = true))
+    private val mutableState = MutableStateFlow(readInstalled(AppUpdateState(checking = true)))
     val state = mutableState.asStateFlow()
     private var operation: Job? = null
     private var lastAttempt = 0L
@@ -60,7 +69,11 @@ class AppUpdateController(context: Context, private val json: Json) {
                 if (saved != null) {
                     runCatching {
                         val manifest = json.decodeFromString<AppUpdateManifest>(saved)
-                        check(manifest.versionCode > BuildConfig.VERSION_CODE)
+                        if (manifest.versionCode <= mutableState.value.installedVersionCode) {
+                            mutableState.update { it.copy(checked = true) }
+                            discardReady()
+                            return@runCatching
+                        }
                         verifyFile(manifest)
                         mutableState.value = mutableState.value.copy(release = manifest, ready = true)
                     }.onFailure { discardReady() }
@@ -81,6 +94,7 @@ class AppUpdateController(context: Context, private val json: Json) {
     }
 
     fun check(manual: Boolean = true) {
+        refreshInstalledVersion()
         if (operation != null || (!manual && mutableState.value.ready)) return
         val now = System.currentTimeMillis()
         if (!manual && (BuildConfig.DEBUG || !mutableState.value.autoCheck ||
@@ -90,7 +104,7 @@ class AppUpdateController(context: Context, private val json: Json) {
             try {
                 preferences.attempt(now)
                 lastAttempt = now
-                val release = source.latest().takeIf { it.versionCode > BuildConfig.VERSION_CODE }
+                val release = source.latest().takeIf { it.versionCode > mutableState.value.installedVersionCode }
                 val keepReady = mutableState.value.ready && mutableState.value.release == release
                 if (!keepReady) discardReady()
                 val incompatibility = when {
@@ -173,6 +187,20 @@ class AppUpdateController(context: Context, private val json: Json) {
         mutableState.value = mutableState.value.copy(error = "Installer Android belum dapat dibuka. Coba lagi.")
     }
 
+    @Suppress("DEPRECATION")
+    private fun readInstalled(previous: AppUpdateState): AppUpdateState {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+        return previous.reconcileInstalled(code, info.versionName ?: BuildConfig.VERSION_NAME)
+    }
+
+    fun refreshInstalledVersion() {
+        val previous = mutableState.value
+        val next = readInstalled(previous)
+        mutableState.value = next
+        if (previous.release != null && next.release == null) scope.launch { discardReady() }
+    }
+
     private fun runOperation(onFinished: (() -> Unit)? = null, block: suspend CoroutineScope.() -> Unit) {
         if (operation != null) return
         operation = scope.launch(start = CoroutineStart.LAZY) {
@@ -209,7 +237,7 @@ class AppUpdateController(context: Context, private val json: Json) {
     @Suppress("DEPRECATION")
     private fun verifyFile(manifest: AppUpdateManifest) {
         AppUpdatePolicy.validate(manifest)
-        check(manifest.versionCode > BuildConfig.VERSION_CODE && apk.isFile && apk.length() == manifest.sizeBytes)
+        check(manifest.versionCode > mutableState.value.installedVersionCode && apk.isFile && apk.length() == manifest.sizeBytes)
         val digest = MessageDigest.getInstance("SHA-256")
         apk.inputStream().use { input ->
             val buffer = ByteArray(64 * 1024)
