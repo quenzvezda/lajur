@@ -37,3 +37,6 @@ gradlew.bat text eol=crlf
 *.webp binary
 *.pdf binary
 *.jar binary
+
+# Keep upstream report distributions and licenses byte-for-byte.
+services/api/src/Lajur.Api/wwwroot/vendor/** -text -whitespace

@@ -18,3 +18,22 @@ while new input remains available. Edit/delete wait until pending creates finish
 Only confirmed writes appear in canonical totals/table; pending entries have
 separate statuses. The queue is capped at 50 unfinished entries and is not a
 durable/offline browser outbox. Leaving warns while queued entries remain.
+
+Owner-requested browser batch refinement (2026-10-24): monthly and all-year
+tables allow explicit selection of indexed rows within the current filter. A
+review dialog changes one field (payment, category, date or description) per
+batch. Category choices must match every selected row's type; date changes stay
+within the workbook year. It sends the existing revisioned PUT sequentially,
+preserving all other fields. This is a series of single-row commits, not an
+atomic multi-row write. A conflict/rejection stops later rows and reports partial
+success. Unknown outcomes keep the dialog open until a read establishes the
+result; only an unchanged revision can be retried, and a completed update is
+never replayed. Pending creates block batch writes. Filter changes clear
+selection; unindexed rows cannot be selected. There is no new finance endpoint,
+workbook mutation implementation, Android feature or SQL ledger.
+
+Table PDF/XLSX reports are read-only browser exports of the complete filtered and
+sorted canonical snapshot, independent of selected checkboxes. Bundled local
+libraries/fonts generate downloadable files without sending data to another
+service. CSV remains available. Date/payment/category retention is per-month,
+in-memory UI state; an unlocked date returns to the month's default after save.

@@ -1,4 +1,5 @@
 import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
+import { openTransactionBatch } from './transaction-batch.js';
 
 // Browser transaction drafts are kept in this tab's memory. All canonical writes go through the API.
 export function createTransactionEditor({ h, getReport, refreshReport, render, notify }) {
@@ -42,7 +43,7 @@ export function createTransactionEditor({ h, getReport, refreshReport, render, n
       ? today : `${report.year}-${String(month).padStart(2, '0')}-01`;
     return { id: newId(), revision: null, base: null, input: { date, type: report.transactionTypes.includes('Pengeluaran')
       ? 'Pengeluaran' : report.transactionTypes[0], paymentMethod: '', category: '', amountIdr: '', description: '', ...previous },
-      dirty: false, retain: { paymentMethod: false, category: false }, conflict: null, uncertain: null, message: '' };
+      dirty: false, retain: { date: false, paymentMethod: false, category: false }, conflict: null, uncertain: null, message: '' };
   }
   function state(month) {
     if (!drafts.has(month)) drafts.set(month, initial(month));
@@ -82,7 +83,7 @@ export function createTransactionEditor({ h, getReport, refreshReport, render, n
   function completed(month, saved) {
     const old = state(month);
     const retain = { ...old.retain };
-    const next = initial(month, { date: old.input.date, type: old.input.type,
+    const next = initial(month, { date: retain.date ? old.input.date : initial(month).input.date, type: old.input.type,
       paymentMethod: retain.paymentMethod ? old.input.paymentMethod : '', category: retain.category ? old.input.category : '' });
     // A moved transaction must not leave the next new draft in another month's sheet.
     if (Number(next.input.date.slice(5, 7)) !== month) next.input.date = initial(month).input.date;
@@ -324,12 +325,12 @@ export function createTransactionEditor({ h, getReport, refreshReport, render, n
         s.message = '';
         form.querySelector('.editor-message')?.remove();
       });
-      const lock = ['paymentMethod', 'category'].includes(key) ? h('button', { id: `${id}-lock`, type: 'button', class: 'button field-lock',
+      const lock = ['date', 'paymentMethod', 'category'].includes(key) ? h('button', { id: `${id}-lock`, type: 'button', class: 'button field-lock',
         'aria-label': `Pertahankan ${label.toLocaleLowerCase('id-ID')} setelah simpan`, 'aria-pressed': String(s.retain[key]),
         onclick: () => { s.retain[key] = !s.retain[key]; updateLock(); } }) : null;
       function updateLock() {
         lock.setAttribute('aria-pressed', String(s.retain[key]));
-        lock.title = `${s.retain[key] ? 'Buka kunci' : 'Kunci'} ${label.toLocaleLowerCase('id-ID')}: ${s.retain[key] ? 'kosongkan' : 'pertahankan'} setelah simpan`;
+        lock.title = `${s.retain[key] ? 'Buka kunci' : 'Kunci'} ${label.toLocaleLowerCase('id-ID')}: ${s.retain[key] ? key === 'date' ? 'gunakan tanggal bawaan bulan' : 'kosongkan' : 'pertahankan'} setelah simpan`;
         lock.replaceChildren(h('svg:svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' },
           h('svg:path', { d: 'M5 10h14v11H5Z' }), h('svg:path', { d: s.retain[key] ? 'M8 10V6a4 4 0 0 1 8 0v4' : 'M8 10V6a4 4 0 0 1 8 0' }), h('svg:path', { d: 'M12 14v3' })));
       }
@@ -468,5 +469,11 @@ export function createTransactionEditor({ h, getReport, refreshReport, render, n
   window.addEventListener('beforeunload', event => {
     if (busy || uncertainDelete || pendingQueue() || [...drafts.values()].some(s => s.dirty || s.uncertain)) { event.preventDefault(); event.returnValue = ''; }
   });
-  return { editor, actions, isBusy: () => busy || sending };
+  function batchEdit(rows, onSaved) {
+    if (busy || pendingQueue()) { notify('Selesaikan antrean atau pemeriksaan penyimpanan terlebih dahulu.'); return; }
+    if (!rows.length || rows.some(row => !row.transactionId || !row.revision)) return;
+    openTransactionBatch({ h, rows, report: getReport(), request, current, inputFrom, sameInput,
+      setBusy: value => { busy = value; }, refresh, render, onSaved });
+  }
+  return { editor, actions, batchEdit, isBusy: () => busy || sending };
 }

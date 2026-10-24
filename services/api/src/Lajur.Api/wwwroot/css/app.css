@@ -396,7 +396,36 @@ p { margin: 0; }
 }
 .tx-toolbar > .input { flex: 1 1 240px; max-width: 360px; }
 .tx-toolbar-rest { display: flex; flex: 1 1 300px; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.tx-toolbar-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.tx-toolbar-end { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tx-exports, .tx-batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tx-batch-actions { padding: 5px 8px; background: var(--accent-soft); border-radius: var(--radius-sm); }
+.tx-check { display: inline-grid; place-items: center; width: 32px; min-height: 32px; cursor: pointer; }
+.tx-check input { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
+.grid .col-check { padding: 2px 3px; width: 38px; vertical-align: middle; }
+.transaction-batch { width: min(880px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 24px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); }
+.transaction-batch::backdrop { background: rgb(0 0 0 / .45); }
+.transaction-batch [hidden] { display: none !important; }
+.transaction-batch h2 { margin-bottom: 8px; }
+.batch-fields { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; margin: 20px 0 10px; }
+.batch-value { display: grid; gap: 6px; }
+.batch-preview { max-height: 40vh; overflow: auto; margin: 16px 0; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.batch-preview .grid { min-width: 620px; }
+.batch-preview .grid th { padding: 8px 10px; }
+.batch-preview .grid td { overflow-wrap: anywhere; min-width: 120px; }
+@media (max-width: 720px) {
+  .tx-check { width: 44px; min-height: 44px; }
+  .transaction-batch { padding: 16px; }
+  .batch-fields { grid-template-columns: 1fr; gap: 12px; }
+  .batch-preview .grid { min-width: 0; }
+  .batch-preview .grid thead { display: none; }
+  .batch-preview .grid tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--border-strong); }
+  .batch-preview .grid td { min-width: 0; border: 0; }
+  .batch-preview .grid td:first-child, .batch-preview .grid td:last-child { grid-column: 1 / -1; }
+  .batch-preview .grid td::before { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 4px; }
+  .batch-preview .grid td:nth-child(2)::before { content: 'Nilai saat ini'; }
+  .batch-preview .grid td:nth-child(3)::before { content: 'Nilai baru'; }
+  .batch-preview .grid td:last-child { font-size: .8rem; color: var(--muted); }
+}
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .55rem;

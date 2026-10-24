@@ -100,7 +100,69 @@ entry point is `/masuk`, then `/buku/{year}#okt` (or another test month).
   Check edit/copy/delete square SVG buttons, hover titles, keyboard labels and
   44 px mobile touch targets; each icon must retain its existing action.
 
-## Recorded validation — 2026-10-10
+## Batch editing and table reports — 2026-10-24
+
+1. In a month, filter Pembayaran to `(kosong)`. Select individual checkboxes or
+   the header checkbox to select all editable rows remaining after every filter.
+   Choose **Edit batch**, set **Pembayaran baru**, review the old/new values and
+   choose **Simpan N transaksi**. Counts/progress and partial failures stay visible.
+   Category, date and description can be changed through the same dialog, one
+   field at a time. Mixed types cannot be assigned a category from the wrong type.
+2. Change filters/search and confirm selection clears; sorting preserves the
+   selection. Unindexed rows remain readable with selection disabled. Test the
+   same workflow in Semua transaksi. A date change may move rows to another
+   month of the same year. Other fields, IDs and amounts must remain intact.
+3. Change the second selected row from another client before saving a three-row
+   batch. The first may commit, but the stale row and subsequent rows must stay
+   untouched. Close, refresh/reselect and review current values before continuing.
+4. Lose a PUT response after acceptance. Closing is disabled until **Periksa
+   hasil** reconciles the outcome. An exact stored result counts as saved without
+   another PUT/revision increment. An unchanged revision permits an explicit
+   retry; a changed/deleted row stops the remainder for review. Pending creates
+   block batch writes. Failed/unfinished rows are never presented as saved.
+5. Verify date/payment/category locks independently. A locked date is retained
+   after **Simpan & lanjut**; unlocking resets the next draft to today's date in
+   the open month (or that month's first day). Locks stay within the month and
+   do not move the next draft into another month after editing a moved row.
+6. Export CSV, PDF and Excel with filters/search/sorting active and only one row
+   selected. Every filtered row, in its visible order, must be exported. An empty
+   result disables export. The month column is absent; dates use `24-Okt-2026`.
+   PDF/XLSX include Laporan Transaksi, local export time with timezone, count,
+   total of listed amounts, date range, page URL and Halaman X dari Y. There is
+   no type summary or CSV blank-payment note. Row-level Tipe remains available.
+7. Check multiple PDF pages, repeated table headers, long wrapped descriptions,
+   exact totals, source URL and the final total row. Open XLSX in Excel: verify
+   formatted numeric IDR, real date cells with Indonesian month formats, literal
+   user text, frozen/filterable headers, print area, repeat headers and page
+   footers. More than 15-digit amounts/totals must remain exact decimal text.
+8. At desktop and 390 px in light/dark themes, verify checkbox touch targets,
+   visible keyboard focus, old/new previews and recovery controls. The narrow
+   preview stacks old/new values; only the main table scrolls horizontally.
+
+Opt-in automated acceptance (isolated loopback host/disposable account only):
+
+```powershell
+$env:LAJUR_SMOKE_URL = 'http://127.0.0.1:18080'
+$env:LAJUR_SMOKE_CREDENTIALS = '<ignored path to synthetic account JSON>'
+$env:LAJUR_SMOKE_OUTPUT = '<ignored output directory>'
+$env:LAJUR_PLAYWRIGHT_MODULE = '<installed Playwright package path>'
+node services/api/tests/browser/web-batch-exports.smoke.cjs
+node --test services/api/tests/browser/transaction-report.test.mjs
+```
+
+This optional smoke creates synthetic transactions in the disposable account.
+It is not a mandatory UI CI suite. The deterministic report-model checks need
+only Node.js 22 or later. Native Excel print/recalculation is a separate manual
+verification, not a server dependency.
+
+Recorded 2026-10-24: API build, 25 WebViewer integration checks, two Node model
+checks and the opt-in Chromium batch/export smoke pass. Exported 40-row reports
+reconcile order/count/exact totals; multi-page PDF and native Excel print previews
+were visually inspected. Excel recalc reports zero formula errors. Separate
+exports verify exact 19-digit IDR and literal formula/HTML-like user strings.
+Desktop and 390 px light/dark previews show the selection and reviewed changes.
+
+### Prior validation — 2026-10-10
 
 Backend automated checks cover browser CRUD/idempotency, CSRF/auth separation,
 tenant isolation, web/Android revision conflicts, invalid amount/year/category,

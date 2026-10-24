@@ -3,6 +3,7 @@ import { bindGroupedAmountInput, parseIdrAmount } from './money-input.js';
 import { createWorkbookSettingsEditor } from './settings.js';
 import { createMasterEditor } from './master.js';
 import { paymentLabel } from './payment-icons.js';
+import { reportDate, transactionReport, exportPdf, exportExcel } from './transaction-report.js';
 
 // Lajur workbook UI. Reports remain server-computed; browser commands use stable transaction IDs.
 // Renders the server-computed YearReport (embedded as JSON). Headline totals always come from the
@@ -48,8 +49,7 @@ import { paymentLabel } from './payment-icons.js';
     return { y, m, d, weekday: new Date(Date.UTC(y, m - 1, d)).getUTCDay() };
   };
   const formatDate = (iso) => {
-    const p = parseDate(iso);
-    return `${DAY_SHORT[p.weekday]}, ${String(p.d).padStart(2, '0')} ${MONTH_SHORT[p.m - 1]}`;
+    return reportDate(iso);
   };
   const daysInMonth = (year, month) => new Date(Date.UTC(year, month, 0)).getUTCDate();
   const collator = new Intl.Collator('id-ID', { sensitivity: 'base', numeric: true });
@@ -519,7 +519,6 @@ import { paymentLabel } from './payment-icons.js';
   // ---------- transaction table (Excel-like autofilter) ----------
   const COLUMNS = [
     { key: 'line', label: '#', numeric: true, sortOnly: true, className: 'col-line' },
-    { key: 'month', label: 'Bulan', filter: 'values', allOnly: true, display: (r) => MONTH_SHORT[r.month - 1], sortValue: (r) => r.month },
     { key: 'date', label: 'Tanggal', filter: 'values', display: (r) => formatDate(r.date), className: 'col-date' },
     { key: 'type', label: 'Tipe', filter: 'values' },
     { key: 'paymentMethod', label: 'Pembayaran', filter: 'values' },
@@ -529,7 +528,7 @@ import { paymentLabel } from './payment-icons.js';
   ];
 
   function tableState(key) {
-    if (!tableStates.has(key)) tableStates.set(key, { search: '', sort: { key: 'date', dir: 'desc' }, filters: {}, selected: null });
+    if (!tableStates.has(key)) tableStates.set(key, { search: '', sort: { key: 'date', dir: 'desc' }, filters: {}, selected: null, checked: new Set(), selectionFilter: null });
     return tableStates.get(key);
   }
 
@@ -598,6 +597,11 @@ import { paymentLabel } from './payment-icons.js';
     const draw = () => {
       if (search.value !== state.search) search.value = state.search;
       const filtered = sortRows(applyFilters(rows, state, columns), state, columns);
+      const selectionFilter = JSON.stringify([state.search, state.filters], (_, value) => value instanceof Set ? [...value] : typeof value === 'bigint' ? value.toString() : value);
+      if (state.selectionFilter !== selectionFilter) state.checked.clear();
+      state.selectionFilter = selectionFilter;
+      const eligible = new Set(filtered.filter(row => row.transactionId && row.revision).map(row => row.transactionId));
+      for (const id of state.checked) if (!eligible.has(id)) state.checked.delete(id);
       const active = Object.keys(state.filters).length > 0 || state.search.trim() !== '';
       visibleRows = filtered;
       toolbarExtras.replaceChildren(...toolbar(filtered.length));
@@ -614,21 +618,49 @@ import { paymentLabel } from './payment-icons.js';
       const hasAny = chips.length > 0 || state.search || state.sort;
       return [
         h('div', { class: 'chips' }, chips),
+        state.checked.size ? h('div', { class: 'tx-batch-actions' },
+          h('strong', { class: 'small', text: `${state.checked.size} transaksi dipilih` }),
+          h('button', { type: 'button', class: 'button button--primary button--sm', text: 'Edit batch', disabled: transactions.isBusy(),
+            onclick: () => transactions.batchEdit(visibleRows.filter(row => state.checked.has(row.transactionId)), ids => { ids.forEach(id => state.checked.delete(id)); }) }),
+          h('button', { type: 'button', class: 'button button--ghost button--sm', text: 'Batal pilih', onclick: () => { state.checked.clear(); draw(); } })) : null,
         options.editable && selected ? h('div', { class: 'tx-selected-actions' },
           h('span', { class: 'muted small', text: `Dipilih: ${formatDate(selected.date)} · ${selected.category}` }),
           transactions.actions(selected, options.month)) : null,
         h('div', { class: 'tx-toolbar-end' },
           h('span', { class: 'muted small', text: visible === rows.length ? `${rows.length} baris` : `${visible} dari ${rows.length} baris` }),
-          h('button', {
-            type: 'button', class: 'button button--ghost button--sm', disabled: visible === 0,
-            title: 'Unduh baris yang sedang tampil (sesuai filter & urutan) sebagai CSV',
-            text: 'Ekspor CSV', onclick: () => downloadCsv(visibleRows, options.exportName, visible !== rows.length)
-          }),
+          h('div', { class: 'tx-exports', role: 'group', 'aria-label': 'Ekspor baris sesuai filter dan urutan' },
+            h('span', { class: 'muted small', text: 'Ekspor' }),
+            h('button', { type: 'button', class: 'button button--ghost button--sm', disabled: visible === 0, text: 'CSV',
+              'aria-label': 'Ekspor CSV', onclick: () => downloadCsv(visibleRows, options.exportName, visible !== rows.length) }),
+            ...[['PDF', exportPdf], ['Excel', exportExcel]].map(([label, exporter]) => h('button', {
+              type: 'button', class: 'button button--ghost button--sm', disabled: visible === 0, text: label, 'aria-label': `Ekspor ${label}`,
+              onclick: async event => {
+                const button = event.currentTarget;
+                const model = transactionReport(visibleRows, { year: report.year, name: options.exportName, sourceUrl: location.href });
+                button.disabled = true; button.textContent = 'Memproses…';
+                try { await exporter(model); }
+                catch (error) { notify(`Ekspor ${label} gagal. ${error.message}`); }
+                finally { button.disabled = false; button.textContent = label; }
+              }
+            }))),
           hasAny ? h('button', { type: 'button', class: 'button button--ghost button--sm', text: 'Reset', onclick: () => { state.filters = {}; state.search = ''; state.sort = { key: 'date', dir: 'desc' }; draw(); } }) : null)].filter(Boolean);
     };
 
     const grid = (filtered) => {
-      const headRow = h('tr', null, columns.map((column) => {
+      const selectable = filtered.filter(row => row.transactionId && row.revision);
+      const checkbox = (label, checked, disabled, change, mixed = false) => {
+        const input = h('input', { type: 'checkbox', 'aria-label': label, checked, disabled,
+          onclick: event => event.stopPropagation(), onchange: () => {
+            change(input.checked); draw();
+            [...host.querySelectorAll('input[type="checkbox"]')].find(el => el.getAttribute('aria-label') === label)?.focus({ preventScroll: true });
+          } });
+        input.indeterminate = mixed;
+        return h('label', { class: 'tx-check', title: label, onclick: event => event.stopPropagation() }, input);
+      };
+      const headRow = h('tr', null, h('th', { scope: 'col', class: 'col-check' },
+        checkbox('Pilih semua transaksi terfilter', selectable.length > 0 && selectable.every(row => state.checked.has(row.transactionId)), !selectable.length,
+          checked => { for (const row of selectable) checked ? state.checked.add(row.transactionId) : state.checked.delete(row.transactionId); },
+          state.checked.size > 0 && state.checked.size < selectable.length)), columns.map((column) => {
         const sorted = state.sort && state.sort.key === column.key ? state.sort.dir : null;
         const isFiltered = Boolean(state.filters[column.key]);
         return h('th', {
@@ -652,14 +684,15 @@ import { paymentLabel } from './payment-icons.js';
       if (options.editable) headRow.append(h('th', { scope: 'col', text: 'Aksi' }));
 
       const body = filtered.length === 0
-        ? h('tr', null, h('td', { class: 'tx-empty', colspan: String(columns.length + (options.editable ? 1 : 0)), text: rows.length === 0 ? 'Belum ada transaksi.' : 'Tidak ada baris yang cocok dengan filter.' }))
+        ? h('tr', null, h('td', { class: 'tx-empty', colspan: String(columns.length + 1 + (options.editable ? 1 : 0)), text: rows.length === 0 ? 'Belum ada transaksi.' : 'Tidak ada baris yang cocok dengan filter.' }))
         : filtered.map((row) => {
           const id = row.transactionId || `${row.month}:${row.line}`;
           return h('tr', {
-            class: [state.selected === id && 'is-selected'],
+            class: [(state.selected === id || state.checked.has(id)) && 'is-selected'],
             dataset: { transactionId: row.transactionId || '' },
             onclick: () => { state.selected = state.selected === id ? null : id; draw(); }
-          }, columns.map((column) => {
+          }, h('td', { class: 'col-check' }, checkbox(`Pilih transaksi ${row.date} baris ${row.line}`, state.checked.has(id), !row.transactionId || !row.revision,
+            checked => { checked ? state.checked.add(id) : state.checked.delete(id); })), columns.map((column) => {
             if (column.key === 'type') return h('td', null, typePill(row.type));
             if (column.key === 'amountIdr') return h('td', { class: ['num', 'amount', typeClass(row.type)], text: fmt(BigInt(row.amountIdrText ?? String(row.amountIdr))) });
             if (column.key === 'paymentMethod' && !row.paymentMethod) return h('td', { class: 'muted', title: 'Pembayaran kosong — tetap dihitung dalam total', text: '—' });
@@ -700,9 +733,9 @@ import { paymentLabel } from './payment-icons.js';
       if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
       return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
     };
-    const header = ['Bulan', 'Tanggal', 'Tipe', 'Pembayaran', 'Kategori', 'Jumlah (Rp)', 'Keterangan'];
+    const header = ['Tanggal', 'Tipe', 'Pembayaran', 'Kategori', 'Jumlah (Rp)', 'Keterangan'];
     const lines = [header.join(';')].concat(rows.map((row) => [
-      MONTH_SHORT[row.month - 1], row.date, row.type, row.paymentMethod, row.category, row.amountIdrText ?? row.amountIdr, row.description
+      reportDate(row.date), row.type, row.paymentMethod, row.category, row.amountIdrText ?? row.amountIdr, row.description
     ].map(cell).join(';')));
     const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
