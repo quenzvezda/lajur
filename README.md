@@ -30,7 +30,7 @@ The current interface uses Indonesian labels and integer IDR amounts.
 
 ## Try Lajur
 
-**Web app:** [lajur.solusi-program.site](https://lajur.solusi-program.site)
+**Web app:** [lajur.solusi-program.online](https://lajur.solusi-program.online)
 
 The hosted service requires an account, and registration is **invite-only**.
 If you would like to try Lajur, **contact me to request an invite code**.
