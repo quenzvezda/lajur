@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://lajur.solusi-program.site">Open web app</a> ·
+  <a href="https://lajur.solusi-program.online">Open web app</a> ·
   <a href="https://github.com/quenzvezda/lajur/releases/latest">Download Android APK</a> ·
   <a href="docs/index.md">Documentation</a>
 </p>
