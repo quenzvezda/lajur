@@ -2,7 +2,8 @@
 
 ## Pipeline
 
-On a trusted push or manual CI run on `main`:
+On a trusted push to `main` affecting backend/web, or a manual CI run on `main`
+with `target: backend` or `all`:
 
 1. Backend unit/integration/workbook tests and the existing container smoke pass.
 2. A GitHub-hosted `ubuntu-24.04-arm` runner builds the production ARM64 image.
@@ -19,7 +20,11 @@ the `main` branch. Main workflow runs are not automatically cancelled mid-deploy
 the production job also has a non-cancelling concurrency group. The gate serializes
 host operations and rejects stale run numbers or conflicting retries.
 
-Android signing/publication continues independently after its existing checks.
+Android-only and ordinary documentation changes skip backend tests, image builds,
+publication and deployment. Web Razor Pages and static assets are part of the API
+image, so web changes still rebuild/deploy that image. Android signing/publication
+continues independently after its own checks. See [CI component selection](CI.md)
+for path rules, manual dispatch and required checks.
 Backend deployment does not rebuild or replace workbook templates.
 
 ## Credentials and host setup

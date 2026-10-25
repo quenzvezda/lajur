@@ -4,6 +4,15 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Components to build (on main, also release/deploy)
+        type: choice
+        default: all
+        options:
+          - all
+          - android
+          - backend
 
 permissions:
   contents: read
@@ -14,8 +23,33 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      android: ${{ steps.changes.outputs.android }}
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test CI selection and release publication guards
+        run: python3 -m unittest discover -s .github/scripts
+
+      - name: Select affected components
+        id: changes
+        env:
+          CI_TARGET: ${{ inputs.target || 'all' }}
+        run: python3 .github/scripts/ci.py detect
+
   backend:
     name: Backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -31,9 +65,6 @@ jobs:
       - name: Restore
         run: dotnet restore services/api/Lajur.slnx
 
-      - name: Test release publication guards
-        run: python3 .github/scripts/test_publish_android_release.py
-
       - name: Test production deployment guards
         run: python3 services/api/deploy/test_deploy_gate.py
 
@@ -48,6 +79,8 @@ jobs:
 
   android:
     name: Android
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -91,6 +124,23 @@ jobs:
 
       - name: Container smoke test
         run: bash services/api/tests/container-smoke.sh lajur-api:ci tests/workbook-fixtures/LajurWorkbookFixture.xlsm
+
+  ci-check:
+    name: CI check
+    needs: [changes, backend, android, container]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out CI guard
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Require every selected job to succeed
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/ci.py check
 
   publish-backend:
     name: Publish ARM64 backend
@@ -168,7 +218,7 @@ jobs:
 
   android-release:
     name: Signed Android APK
-    needs: [backend, android, container]
+    needs: android
     if: github.repository == 'quenzvezda/lajur' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     environment: android-release
     runs-on: ubuntu-latest

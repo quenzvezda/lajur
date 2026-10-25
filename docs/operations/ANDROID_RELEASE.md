@@ -2,8 +2,16 @@
 
 ## Automatic builds
 
-The `CI` workflow tests backend, Android and the container. A successful push
-to `main`, or a manual CI dispatch on `main`, then runs `Signed Android APK`.
+The `CI` workflow detects changed components before running application checks.
+Android changes run lint, unit tests and assembly. A successful Android check
+on a push to `main` then runs `Signed Android APK`; backend/container checks are
+independent and are not prerequisites for signing. Backend/web-only and ordinary
+documentation changes do not build or publish an APK.
+
+In **Actions → CI → Run workflow**, select `target: android` to force an Android
+build, `backend` for backend/web only, or `all` (the default) for both. Dispatching
+`android` or `all` on `main` also signs and publishes an APK, even without a code
+change. See [CI component selection](CI.md) for path rules and required checks.
 Pull requests and other branches never run the signing job. The job also checks
 the repository identity so forks cannot publish official Lajur builds.
 
@@ -20,6 +28,9 @@ Each build uses `versionCode = 100000 + github.run_number` and
 `versionName = 1.0.<run_number>`. Retain the CI workflow's run-number sequence;
 if the workflow is replaced/reset, choose a larger version-code base before
 distributing any APK. Rerunning the same workflow run keeps its version code.
+Skipped Android jobs do not publish a version or alter the latest update manifest.
+Run numbers can have gaps between APK releases because backend/documentation CI
+runs still consume workflow run numbers.
 
 APK verification checks the expected signing certificate before uploading:
 
@@ -40,8 +51,8 @@ uploads every asset, then publishes `v1.0.<run_number>` and marks it latest.
 The publication job alone has `contents: write`; it does not receive signing
 credentials. Pull requests and other branches cannot run it.
 
-Every successful main build is an automatically published release, including
-manual CI runs on main. This is the current continuous distribution policy;
+Every successful selected Android build on main is an automatically published
+release, including manual `android`/`all` CI runs on main. This is the current continuous distribution policy;
 there is no separate manual promotion gate. Never overwrite a published APK
 with a different build under the same version. Rerunning publication with
 identical asset digests is safe; changed assets require a new workflow run/version.
