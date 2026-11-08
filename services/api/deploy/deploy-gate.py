@@ -14,6 +14,9 @@ from datetime import datetime, timezone
 IMAGE = 'ghcr.io/quenzvezda/lajur-api'
 SOURCE = 'https://github.com/quenzvezda/lajur'
 REQUEST = re.compile(r'deploy (sha256:[0-9a-f]{64}) ([0-9a-f]{40}) ([1-9][0-9]{0,11})')
+# Health is checked through this host's own Nginx and certificate, pinned to loopback,
+# so public DNS or Cloudflare problems cannot fail (or fake) a deployment.
+HEALTH_HOST = 'lajur.solusi-program.online'
 REQUIRED_ENV = {'LAJUR_IMAGE', 'LAJUR_TRUSTED_PROXY_CIDR'}
 # Optional host-only settings preserved across deploys (ADR 0013). Bare base URL only.
 OPTIONAL_ENV = {'LAJUR_OTLP_ENDPOINT': re.compile(r'(https?://[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?/?)?')}
@@ -140,7 +143,8 @@ class Deployment:
             for endpoint in ('live', 'ready'):
                 self.call('curl', '--fail', '--silent', '--show-error', '--retry', '3',
                           '--retry-all-errors', '--max-time', '15',
-                          f'https://lajur.solusi-program.site/health/{endpoint}')
+                          '--resolve', f'{HEALTH_HOST}:443:127.0.0.1',
+                          f'https://{HEALTH_HOST}/health/{endpoint}')
             write_atomic(state_path, json.dumps({'image': image, 'revision': revision, 'run': run,
                                                 'previousImage': values['LAJUR_IMAGE'],
                                                 'backup': str(backup),

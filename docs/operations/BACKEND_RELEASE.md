@@ -50,6 +50,13 @@ It fixes all paths, image repository and Compose arguments itself.
 which each deploy preserves. Reinstall the gate from this repository before
 adding that key: an older installed gate rejects the file as unexpected.
 
+Post-deploy health checks call `https://lajur.solusi-program.online/health/{live,ready}`
+pinned to `127.0.0.1` (`curl --resolve`), so they exercise the host's own Nginx,
+certificate and API without depending on public DNS or Cloudflare. The `.site`
+domain was intentionally allowed to expire in November 2026; gates installed
+before that change still check `.site` and roll back every deploy until the
+gate is reinstalled.
+
 The deployment client's private key stays in a temporary directory on the
 GitHub runner and is removed after use. Registry authentication uses this job's
 short-lived `GITHUB_TOKEN`, sent through encrypted SSH stdin; passwords/tokens

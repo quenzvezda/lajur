@@ -101,7 +101,11 @@ class DeployGuards(unittest.TestCase):
             self.assertEqual(10, state['run'])
             calls = [args for args, _ in deploy.calls]
             self.assertLess(calls.index(('compose', 'stop', 'api')), calls.index(('snapshot',)))
-            self.assertEqual(2, sum(args[0] == 'curl' for args in calls))
+            health = [args for args in calls if args[0] == 'curl']
+            self.assertEqual(2, len(health))
+            for args, endpoint in zip(health, ('live', 'ready')):
+                self.assertIn('lajur.solusi-program.online:443:127.0.0.1', args)
+                self.assertEqual(f'https://lajur.solusi-program.online/health/{endpoint}', args[-1])
             self.assertEqual([], list(deploy.runtime.iterdir()))
 
     def test_optional_otlp_endpoint_is_preserved_across_deploy(self):
