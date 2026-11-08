@@ -27,6 +27,7 @@ public static class LajurTelemetry
             return builder;
         }
 
+        PreferDeltaTemporality(builder.Configuration);
         var serviceName = section["ServiceName"] is { Length: > 0 } name ? name : DefaultServiceName;
         var version = typeof(LajurTelemetry).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
@@ -59,6 +60,21 @@ public static class LajurTelemetry
             .UseOtlpExporter(OtlpExportProtocol.HttpProtobuf, endpoint);
 
         return builder;
+    }
+
+    public const string TemporalityPreferenceKey = "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE";
+
+    /// <summary>
+    /// The Elasticsearch exporter drops cumulative histograms, so export deltas unless the
+    /// host explicitly configures the standard OTel setting. UseOtlpExporter reads it from
+    /// IConfiguration.
+    /// </summary>
+    public static void PreferDeltaTemporality(IConfigurationManager configuration)
+    {
+        if (string.IsNullOrWhiteSpace(configuration[TemporalityPreferenceKey]))
+        {
+            configuration.AddInMemoryCollection([new(TemporalityPreferenceKey, "delta")]);
+        }
     }
 
     /// <summary>

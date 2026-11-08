@@ -29,7 +29,11 @@ HTTP/80 may redirect to HTTPS.
 
 Suggested host:
 
-`lajur.solusi-program.site` (chosen for the first deployment on 2026-10-10)
+`lajur.solusi-program.online` (Cloudflare proxied). The first deployment on
+2026-10-10 used `lajur.solusi-program.site`; that domain was intentionally
+allowed to expire in November 2026 and its Nginx site and certificate were
+removed from the VPS. The `.site` bootstrap templates in `services/api/deploy/`
+are historical.
 
 Actual domain remains deployment configuration. The first ARM64 production
 bootstrap uses the separate configuration under `services/api/deploy/` and

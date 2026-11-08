@@ -40,10 +40,15 @@ Signals:
   `error.type` (exception type name). Workbook year is deliberately not a metric
   dimension. These are the only Lajur signals considered safe for a public status
   page: their dimensions are method, route template, status code, runtime values
-  and the workbook dimensions above.
+  and the workbook dimensions above. Metrics are exported with **delta**
+  temporality (`OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` unless
+  the host sets it), because the Elasticsearch exporter drops cumulative
+  histograms.
 - **Logs:** existing `ILogger` events at the configured level, following the
   rules in [BACKEND.md §10](../architecture/BACKEND.md#10-observability). They
-  may contain internal user/transaction UUIDs and are private-only.
+  may contain internal user/transaction UUIDs and are private-only. EF Core
+  command text (`Microsoft.EntityFrameworkCore.Database.Command`) is logged only
+  at Warning and above.
 
 Privacy rules enforced in the API before export:
 

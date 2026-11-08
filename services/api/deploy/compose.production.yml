@@ -15,7 +15,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 8080
-      AllowedHosts: "lajur.solusi-program.site;lajur.solusi-program.online;localhost;127.0.0.1"
+      AllowedHosts: "lajur.solusi-program.online;localhost;127.0.0.1"
       Lajur__Storage__RootPath: /srv/lajur
       Lajur__ReverseProxy__TrustedNetworks__0: ${LAJUR_TRUSTED_PROXY_CIDR:?Set the dedicated Docker gateway /32}
       # Optional OTLP/HTTP base URL (ADR 0013). Empty disables telemetry.

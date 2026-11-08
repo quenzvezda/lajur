@@ -3,7 +3,9 @@ using Lajur.Api.Telemetry;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
 
 namespace Lajur.IntegrationTests;
@@ -43,6 +45,31 @@ public sealed class TelemetryTests
             span.TagObjects,
             tag => tag.Value?.ToString()?.Contains("secret-value", StringComparison.Ordinal) == true);
         Assert.Equal("api/v1/auth/registration", span.GetTagItem("http.route"));
+        Assert.Equal("delta", factory.Services.GetRequiredService<IConfiguration>()[LajurTelemetry.TemporalityPreferenceKey]);
+    }
+
+    [Fact]
+    public void Delta_temporality_is_the_default_but_host_setting_wins()
+    {
+        var unset = new ConfigurationManager();
+        LajurTelemetry.PreferDeltaTemporality(unset);
+        Assert.Equal("delta", unset[LajurTelemetry.TemporalityPreferenceKey]);
+
+        var explicitSetting = new ConfigurationManager();
+        explicitSetting[LajurTelemetry.TemporalityPreferenceKey] = "cumulative";
+        LajurTelemetry.PreferDeltaTemporality(explicitSetting);
+        Assert.Equal("cumulative", explicitSetting[LajurTelemetry.TemporalityPreferenceKey]);
+    }
+
+    [Fact]
+    public void Entity_framework_command_text_is_not_logged_at_information()
+    {
+        using var factory = new LajurApiFactory();
+        var loggers = factory.Services.GetRequiredService<ILoggerFactory>();
+
+        Assert.False(loggers.CreateLogger("Microsoft.EntityFrameworkCore.Database.Command").IsEnabled(LogLevel.Information));
+        Assert.True(loggers.CreateLogger("Microsoft.EntityFrameworkCore.Database.Command").IsEnabled(LogLevel.Warning));
+        Assert.True(loggers.CreateLogger("Lajur.Infrastructure.Finance.WorkbookFinanceService").IsEnabled(LogLevel.Information));
     }
 
     [Theory]
