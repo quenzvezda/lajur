@@ -62,6 +62,7 @@ internal sealed partial class OpenXmlWorkbookEditor(string workbookPath, Workboo
                 && existing.Year == key.Year
                 && string.Equals(existing.ContentHash, HashSnapshot(requestedSnapshot), StringComparison.Ordinal))
             {
+                TransactionReplayed = true;
                 return ToTransaction(command.TransactionId, existing.Revision, command.Transaction);
             }
 

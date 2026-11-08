@@ -71,6 +71,7 @@
 - [ADR 0010 — structured workbook settings](adr/0010-structured-workbook-settings.md)
 - [ADR 0011 — guarded Master and supplemental report](adr/0011-guarded-master-and-supplemental-report.md)
 - [ADR 0012 — local registration and recovery codes](adr/0012-local-registration-and-recovery-codes.md)
+- [ADR 0013 — opt-in OpenTelemetry export](adr/0013-opt-in-opentelemetry-export.md)
 
 ## Reference
 

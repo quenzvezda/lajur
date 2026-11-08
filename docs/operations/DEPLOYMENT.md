@@ -76,8 +76,10 @@ location / {
 
 Browser login to the web viewer requires HTTPS; plain `http://localhost` works only on the
 machine itself.
-The production configuration assumes DNS-only access to Nginx. Enabling a
-Cloudflare proxy requires scoped, trusted real-IP handling first.
+The original `.site` configuration uses DNS-only access to Nginx. The additional
+`.online` site uses Cloudflare proxying with scoped, trusted real-IP handling.
+See [the domain rollout record](VPS_BOOTSTRAP.md#additional-online-domains-2026-10-25)
+for the active host configuration, certificates and rollback backup.
 
 ## 4. GitHub Actions
 

@@ -44,6 +44,11 @@ forced root-owned gate at `/usr/local/sbin/lajur-deploy`, installed from
 and preserves only the additional `SSH_ORIGINAL_COMMAND` variable.
 The gate accepts exactly `deploy sha256:<64 hex> <40-hex commit> <positive run>`.
 It fixes all paths, image repository and Compose arguments itself.
+`production.env` must contain exactly `LAJUR_IMAGE` and
+`LAJUR_TRUSTED_PROXY_CIDR`, plus optionally `LAJUR_OTLP_ENDPOINT` (bare
+`http(s)://host[:port]`, no credentials or query; [ADR 0013](../adr/0013-opt-in-opentelemetry-export.md)),
+which each deploy preserves. Reinstall the gate from this repository before
+adding that key: an older installed gate rejects the file as unexpected.
 
 The deployment client's private key stays in a temporary directory on the
 GitHub runner and is removed after use. Registry authentication uses this job's

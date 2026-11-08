@@ -12,6 +12,6 @@ public sealed partial class OpenXmlWorkbookStore
         SettingsInput.Validate(command.OperationId, command.ExpectedVersion, 1);
         if (command.Entity is not "category" and not "payment" || command.Action is not "create" and not "update" and not "delete")
             throw new ArgumentException("Operasi Master tidak didukung.");
-        return MutateAsync(key, (editor, timestamp) => editor.ChangeMaster(key, command, audit, timestamp), cancellationToken, backupSettings: true);
+        return MutateAsync(key, (editor, timestamp) => editor.ChangeMaster(key, command, audit, timestamp), cancellationToken, backupSettings: true, changeSource: audit.Source);
     }
 }

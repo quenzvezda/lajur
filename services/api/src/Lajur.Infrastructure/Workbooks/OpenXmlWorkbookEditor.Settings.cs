@@ -9,6 +9,7 @@ namespace Lajur.Infrastructure.Workbooks;
 internal sealed partial class OpenXmlWorkbookEditor
 {
     internal bool SettingsReplayed { get; private set; }
+    internal bool TransactionReplayed { get; private set; }
     public BudgetSettings SaveBudget(WorkbookKey key, SaveBudgetSettings command, WorkbookAuditContext audit, DateTimeOffset timestamp)
     {
         var map = WorkbookSettingsMap.ReadBudget(workbookPath);

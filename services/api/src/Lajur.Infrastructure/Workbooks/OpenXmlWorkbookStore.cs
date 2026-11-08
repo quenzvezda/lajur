@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 namespace Lajur.Infrastructure.Workbooks;
 
@@ -347,7 +348,8 @@ public sealed partial class OpenXmlWorkbookStore
         return await MutateAsync(
             key,
             (editor, timestamp) => editor.CreateTransaction(key, command, timestamp),
-            cancellationToken);
+            cancellationToken,
+            changeSource: command.Audit.Source);
     }
 
     public async Task<WorkbookTransaction> UpdateTransactionAsync(
@@ -371,7 +373,8 @@ public sealed partial class OpenXmlWorkbookStore
         return await MutateAsync(
             key,
             (editor, timestamp) => editor.UpdateTransaction(key, command, timestamp),
-            cancellationToken);
+            cancellationToken,
+            changeSource: command.Audit.Source);
     }
 
     public async Task DeleteTransactionAsync(
@@ -399,17 +402,39 @@ public sealed partial class OpenXmlWorkbookStore
                 editor.DeleteTransaction(key, command, timestamp);
                 return true;
             },
-            cancellationToken);
+            cancellationToken,
+            changeSource: command.Audit.Source);
     }
 
     private async Task<TResult> MutateAsync<TResult>(
         WorkbookKey key,
         Func<OpenXmlWorkbookEditor, DateTimeOffset, TResult> mutation,
         CancellationToken cancellationToken,
-        bool backupSettings = false)
+        bool backupSettings = false,
+        WorkbookChangeSource? changeSource = null,
+        [CallerMemberName] string operation = "")
+    {
+        using var telemetry = WorkbookTelemetry.Start("mutate", operation, key.Year, changeSource);
+        try
+        {
+            return await MutateLockedAsync(key, mutation, telemetry, backupSettings, cancellationToken);
+        }
+        catch (Exception exception) when (telemetry.MarkFailed(exception))
+        {
+            throw;
+        }
+    }
+
+    private async Task<TResult> MutateLockedAsync<TResult>(
+        WorkbookKey key,
+        Func<OpenXmlWorkbookEditor, DateTimeOffset, TResult> mutation,
+        WorkbookTelemetry.Operation telemetry,
+        bool backupSettings,
+        CancellationToken cancellationToken)
     {
         var gate = Locks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken);
+        telemetry.LockAcquired();
 
         try
         {
@@ -430,6 +455,10 @@ public sealed partial class OpenXmlWorkbookStore
                 var master = reader.ReadMasterData(tempPath, key.Year);
                 var editor = new OpenXmlWorkbookEditor(tempPath, master);
                 var result = mutation(editor, timeProvider.GetUtcNow());
+                if (editor.SettingsReplayed || editor.TransactionReplayed)
+                {
+                    telemetry.MarkReplayed();
+                }
 
                 if (backupSettings && editor.SettingsReplayed) return result;
 
@@ -461,25 +490,35 @@ public sealed partial class OpenXmlWorkbookStore
     private async Task<TResult> ReadAsync<TResult>(
         WorkbookKey key,
         Func<OpenXmlWorkbookReader, string, TResult> read,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [CallerMemberName] string operation = "")
     {
         ValidateKey(key);
-        var gate = Locks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancellationToken);
-
+        using var telemetry = WorkbookTelemetry.Start("read", operation, key.Year);
         try
         {
-            var activePath = ResolveWorkbookPath(key);
-            if (!File.Exists(activePath))
-            {
-                throw new FileNotFoundException("The active workbook was not found.", activePath);
-            }
+            var gate = Locks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync(cancellationToken);
+            telemetry.LockAcquired();
 
-            return read(new OpenXmlWorkbookReader(), activePath);
+            try
+            {
+                var activePath = ResolveWorkbookPath(key);
+                if (!File.Exists(activePath))
+                {
+                    throw new FileNotFoundException("The active workbook was not found.", activePath);
+                }
+
+                return read(new OpenXmlWorkbookReader(), activePath);
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
-        finally
+        catch (Exception exception) when (telemetry.MarkFailed(exception))
         {
-            gate.Release();
+            throw;
         }
     }
 
