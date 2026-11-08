@@ -193,7 +193,9 @@ OpenTelemetry export is opt-in through `Lajur:Telemetry:OtlpEndpoint`
 (OTLP/HTTP base URL; empty disables it). When enabled, the API exports ASP.NET
 Core server spans (health/static paths excluded), `Lajur.Workbooks` spans around
 workbook read/mutate with only operation, year and lock wait, ASP.NET Core and
-`System.Runtime` metrics, and the log events above. Client address, user agent,
+`System.Runtime` metrics, workbook operation/lock-wait duration histograms (by
+kind, operation, change source, idempotent replay and exception type; Android
+sync outcomes are read from these), and the log events above. Client address, user agent,
 query strings, headers and `user.*`/`enduser.*` span attributes are removed
 before export. Only metrics are suitable for any public view; traces and logs
 are private. See [ADR 0013](../adr/0013-opt-in-opentelemetry-export.md).

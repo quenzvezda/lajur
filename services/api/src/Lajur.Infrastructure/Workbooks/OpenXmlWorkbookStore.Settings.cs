@@ -19,7 +19,7 @@ public sealed partial class OpenXmlWorkbookStore
         ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(command.Changes);
         if (command.Changes.Any(change => change is null)) throw new ArgumentException("Perubahan budget tidak boleh kosong.");
         SettingsInput.Validate(command.OperationId, command.ExpectedVersion, command.Changes.Count);
-        return MutateAsync(key, (editor, timestamp) => editor.SaveBudget(key, command, audit, timestamp), cancellationToken, backupSettings: true);
+        return MutateAsync(key, (editor, timestamp) => editor.SaveBudget(key, command, audit, timestamp), cancellationToken, backupSettings: true, changeSource: audit.Source);
     }
 
     public Task<ProjectionSettings> SaveProjectionSettingsAsync(WorkbookKey key, int month, SaveProjectionSettings command, WorkbookAuditContext audit, CancellationToken cancellationToken = default)
@@ -28,6 +28,6 @@ public sealed partial class OpenXmlWorkbookStore
         ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(command.Changes);
         if (command.Changes.Any(change => change is null)) throw new ArgumentException("Perubahan proyeksi tidak boleh kosong.");
         SettingsInput.Validate(command.OperationId, command.ExpectedVersion, command.Changes.Count);
-        return MutateAsync(key, (editor, timestamp) => editor.SaveProjection(key, month, command, audit, timestamp), cancellationToken, backupSettings: true);
+        return MutateAsync(key, (editor, timestamp) => editor.SaveProjection(key, month, command, audit, timestamp), cancellationToken, backupSettings: true, changeSource: audit.Source);
     }
 }

@@ -49,7 +49,8 @@ public static class LajurTelemetry
                 .AddProcessor(new TelemetryRedactionProcessor()))
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
-                .AddMeter("System.Runtime"))
+                .AddMeter("System.Runtime")
+                .AddMeter(WorkbookTelemetry.SourceName))
             .WithLogging(configureBuilder: null, configureOptions: options =>
             {
                 options.IncludeFormattedMessage = true;

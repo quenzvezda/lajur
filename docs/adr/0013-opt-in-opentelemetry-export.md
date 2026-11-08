@@ -28,10 +28,19 @@ Signals:
 
 - **Traces:** ASP.NET Core server spans (health endpoints excluded) and spans
   from the `Lajur.Workbooks` activity source around workbook read/mutate
-  operations. Workbook spans carry only operation, workbook year and lock wait.
-- **Metrics:** ASP.NET Core/Kestrel meters and the .NET `System.Runtime` meter.
-  These are the only Lajur signals considered safe for a public status page:
-  their dimensions are method, route template, status code and runtime values.
+  operations. Workbook spans carry only operation, workbook year, change source,
+  replay flag and lock wait.
+- **Metrics:** ASP.NET Core meters (hosting, Kestrel, routing, diagnostics,
+  rate limiting, authentication, authorization), the .NET `System.Runtime` meter,
+  and the `Lajur.Workbooks` meter: `lajur.workbook.operation.duration` and
+  `lajur.workbook.lock.wait.duration` histograms (seconds) with dimensions
+  `lajur.workbook.kind` (read/mutate), `lajur.workbook.operation`,
+  `lajur.workbook.change_source` (android/web/excelimport/system, mutations only),
+  `lajur.workbook.replayed` (idempotent retry matched an applied operation) and
+  `error.type` (exception type name). Workbook year is deliberately not a metric
+  dimension. These are the only Lajur signals considered safe for a public status
+  page: their dimensions are method, route template, status code, runtime values
+  and the workbook dimensions above.
 - **Logs:** existing `ILogger` events at the configured level, following the
   rules in [BACKEND.md §10](../architecture/BACKEND.md#10-observability). They
   may contain internal user/transaction UUIDs and are private-only.
