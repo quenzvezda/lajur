@@ -14,6 +14,9 @@ from datetime import datetime, timezone
 IMAGE = 'ghcr.io/quenzvezda/lajur-api'
 SOURCE = 'https://github.com/quenzvezda/lajur'
 REQUEST = re.compile(r'deploy (sha256:[0-9a-f]{64}) ([0-9a-f]{40}) ([1-9][0-9]{0,11})')
+REQUIRED_ENV = {'LAJUR_IMAGE', 'LAJUR_TRUSTED_PROXY_CIDR'}
+# Optional host-only settings preserved across deploys (ADR 0013). Bare base URL only.
+OPTIONAL_ENV = {'LAJUR_OTLP_ENDPOINT': re.compile(r'(https?://[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?/?)?')}
 INTERRUPT_SIGNALS = tuple(getattr(signal, name) for name in ('SIGHUP', 'SIGINT', 'SIGTERM') if hasattr(signal, name))
 
 
@@ -36,6 +39,22 @@ def parse_credentials(stream):
     if not isinstance(token, str) or not 1 <= len(token) <= 2048 or any(c.isspace() for c in token):
         raise ValueError('Invalid registry token')
     return token
+
+
+def parse_production_env(text):
+    values = dict(line.split('=', 1) for line in text.splitlines() if line and not line.startswith('#'))
+    if not REQUIRED_ENV <= set(values) <= REQUIRED_ENV | set(OPTIONAL_ENV):
+        raise ValueError('Unexpected production configuration')
+    for key, pattern in OPTIONAL_ENV.items():
+        if key in values and not pattern.fullmatch(values[key]):
+            raise ValueError(f'Invalid {key} in production configuration')
+    return values
+
+
+def render_production_env(values, image):
+    lines = [f'LAJUR_IMAGE={image}', f'LAJUR_TRUSTED_PROXY_CIDR={values["LAJUR_TRUSTED_PROXY_CIDR"]}']
+    lines += [f'{key}={values[key]}' for key in sorted(OPTIONAL_ENV) if key in values]
+    return '\n'.join(lines) + '\n'
 
 
 def write_atomic(path, content):
@@ -94,9 +113,7 @@ class Deployment:
     def run(self, image, revision, run, token):
         env_path = self.config / 'production.env'
         old_env = env_path.read_text()
-        values = dict(line.split('=', 1) for line in old_env.splitlines() if line and not line.startswith('#'))
-        if set(values) != {'LAJUR_IMAGE', 'LAJUR_TRUSTED_PROXY_CIDR'}:
-            raise ValueError('Unexpected production configuration')
+        values = parse_production_env(old_env)
         state_path = self.config / 'deployment.json'
         state = json.loads(state_path.read_text()) if state_path.exists() else {}
         if run < state.get('run', 0):
@@ -118,7 +135,7 @@ class Deployment:
             stopped = True
             self.compose('stop', 'api')
             backup = self.snapshot(run)
-            write_atomic(env_path, f'LAJUR_IMAGE={image}\nLAJUR_TRUSTED_PROXY_CIDR={values["LAJUR_TRUSTED_PROXY_CIDR"]}\n')
+            write_atomic(env_path, render_production_env(values, image))
             self.compose('up', '-d', '--wait', '--wait-timeout', '150', 'api')
             for endpoint in ('live', 'ready'):
                 self.call('curl', '--fail', '--silent', '--show-error', '--retry', '3',

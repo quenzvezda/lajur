@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace Lajur.Infrastructure.Workbooks;
 
@@ -406,10 +408,14 @@ public sealed partial class OpenXmlWorkbookStore
         WorkbookKey key,
         Func<OpenXmlWorkbookEditor, DateTimeOffset, TResult> mutation,
         CancellationToken cancellationToken,
-        bool backupSettings = false)
+        bool backupSettings = false,
+        [CallerMemberName] string operation = "")
     {
+        using var activity = WorkbookTelemetry.Start("mutate", operation, key.Year);
         var gate = Locks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        var waitStarted = Stopwatch.GetTimestamp();
         await gate.WaitAsync(cancellationToken);
+        WorkbookTelemetry.RecordLockWait(activity, waitStarted);
 
         try
         {
@@ -452,6 +458,10 @@ public sealed partial class OpenXmlWorkbookStore
                 }
             }
         }
+        catch (Exception exception) when (WorkbookTelemetry.MarkFailed(activity, exception))
+        {
+            throw;
+        }
         finally
         {
             gate.Release();
@@ -461,11 +471,15 @@ public sealed partial class OpenXmlWorkbookStore
     private async Task<TResult> ReadAsync<TResult>(
         WorkbookKey key,
         Func<OpenXmlWorkbookReader, string, TResult> read,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [CallerMemberName] string operation = "")
     {
         ValidateKey(key);
+        using var activity = WorkbookTelemetry.Start("read", operation, key.Year);
         var gate = Locks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        var waitStarted = Stopwatch.GetTimestamp();
         await gate.WaitAsync(cancellationToken);
+        WorkbookTelemetry.RecordLockWait(activity, waitStarted);
 
         try
         {
@@ -476,6 +490,10 @@ public sealed partial class OpenXmlWorkbookStore
             }
 
             return read(new OpenXmlWorkbookReader(), activePath);
+        }
+        catch (Exception exception) when (WorkbookTelemetry.MarkFailed(activity, exception))
+        {
+            throw;
         }
         finally
         {

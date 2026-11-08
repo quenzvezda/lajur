@@ -104,6 +104,25 @@ class DeployGuards(unittest.TestCase):
             self.assertEqual(2, sum(args[0] == 'curl' for args in calls))
             self.assertEqual([], list(deploy.runtime.iterdir()))
 
+    def test_optional_otlp_endpoint_is_preserved_across_deploy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            deploy = FakeDeployment(Path(directory))
+            (deploy.config/'production.env').write_text(deploy.old_env + 'LAJUR_OTLP_ENDPOINT=http://otel-gateway:4318\n')
+            deploy.run(IMAGE, REVISION, 10, 'secret')
+            self.assertEqual(f'LAJUR_IMAGE={IMAGE}\nLAJUR_TRUSTED_PROXY_CIDR=172.18.0.1/32\n'
+                             'LAJUR_OTLP_ENDPOINT=http://otel-gateway:4318\n',
+                             (deploy.config/'production.env').read_text())
+
+    def test_unknown_or_unsafe_production_values_are_rejected(self):
+        base = 'LAJUR_IMAGE=sha256:old\nLAJUR_TRUSTED_PROXY_CIDR=172.18.0.1/32\n'
+        self.assertEqual('', gate.parse_production_env(base + 'LAJUR_OTLP_ENDPOINT=\n')['LAJUR_OTLP_ENDPOINT'])
+        for extra in ('OTHER=1\n', 'LAJUR_OTLP_ENDPOINT=http://h:4318/?token=x\n',
+                      'LAJUR_OTLP_ENDPOINT=http://user:pw@h:4318\n', 'LAJUR_OTLP_ENDPOINT=$(id)\n'):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                gate.parse_production_env(base + extra)
+        with self.assertRaises(ValueError):
+            gate.parse_production_env('LAJUR_IMAGE=sha256:old\n')
+
     def test_stale_or_conflicting_run_never_contacts_docker(self):
         for run, image in ((9, IMAGE), (10, gate.IMAGE+'@sha256:'+'c'*64)):
             with tempfile.TemporaryDirectory() as directory:

@@ -1,6 +1,7 @@
 using Lajur.Api.Auth;
 using Lajur.Api.Errors;
 using Lajur.Api.Health;
+using Lajur.Api.Telemetry;
 using Lajur.Api.Web;
 using Lajur.Application.Auth;
 using Lajur.Infrastructure.Auth;
@@ -14,6 +15,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddLajurTelemetry();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
